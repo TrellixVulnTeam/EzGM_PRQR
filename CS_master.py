@@ -5,7 +5,7 @@
 |    record selection and scaling                                       |
 |    Version: 0.3                                                       |
 |                                                                       |
-|    Created on 16/10/2020                                              |
+|    Created on 21/10/2020                                              |
 |    Author: Volkan Ozsarac                                             |
 |    Affiliation: University School for Advanced Studies IUSS Pavia     |
 |    Earthquake Engineering PhD Candidate                               |
@@ -46,7 +46,7 @@ class cs_master:
         
         Parameters
         ----------
-        Tstar    : int, float, list, the default is 0.5.
+        Tstar    : int, float, list, the default is None.
             Conditioning period range [sec].
         gmpe     : str, optional
             GMPE model (see OpenQuake library). 
@@ -125,6 +125,7 @@ class cs_master:
             self.database['Periods'] = Periods[np.argsort(Periods)]
             
         # Define the GMPE object and print the required input information
+        # More can be added here
         if gmpe == 'Boore_Atkinson_2008':
             self.bgmpe = gsim.boore_atkinson_2008.BooreAtkinson2008()
         if gmpe == 'Boore_EtAl_2014':
@@ -155,7 +156,7 @@ class cs_master:
 
     def create(self, site_param = {'vs30': 520}, rup_param = {'rake': 0.0, 'mag': [7.2, 6.5]}, 
                dist_param = {'rjb': [20, 5]}, Hcont=[0.6,0.4], T_Tgt_range  = [0.01,4], 
-               im_Tstar = 1.0, cond = 1, useVar = 1, outdir = 'Outputs'):
+               im_Tstar = 2.0, epsilon = None, cond = 1, useVar = 1, outdir = 'Outputs'):
         """
         
         Details
@@ -184,7 +185,9 @@ class cs_master:
             Hazard contribution for considered scenarios. 
             If None hazard contribution is the same for all scenarios.
         im_Tstar   : int, float, optional, the default is 1.
-            Conditioning intensity measure level [g]
+            Conditioning intensity measure level [g] (conditional selection)
+        epsilon    : list, optional, the default is None.
+            Epsilon values for considered scenarios (conditional selection)
         T_Tgt_range: list, optional, the default is [0.01,4].
             Lower and upper bound values for the period range of target spectrum.
         cond       : int, optional
@@ -210,9 +213,6 @@ class cs_master:
         # add target spectrum settings to self
         self.cond = cond
         self.useVar = useVar
-
-        # add intensity measure level to self
-        self.im_Tstar = im_Tstar
         
         # Get number of scenarios, and their contribution
         nScenarios = len(rup_param['mag'])
@@ -228,8 +228,11 @@ class cs_master:
         idx2 = np.where(temp==np.min(temp))[0][0]
         T_Tgt = self.database['Periods'][idx1:idx2+1]
 
-        # Define the array for AvgSa periods
-        if len(self.Tstar) != 1:
+        if cond == 0:
+            del self.Tstar
+            
+        elif len(self.Tstar) != 1:
+            # Define the array for AvgSa periods
             Tlower = np.min(self.Tstar); temp = np.abs(T_Tgt-Tlower)
             idx1 = np.where(temp==np.min(temp))[0][0]
             Tupper = np.max(self.Tstar); temp = np.abs(T_Tgt-Tupper)
@@ -294,10 +297,15 @@ class cs_master:
             if self.cond == 1:
                 # Get the GMPE output and calculate Avg_Sa_Tstar
                 mu_lnSaTstar,sigma_lnSaTstar = Sa_avg(self.bgmpe,scenario,self.Tstar)
-                # Back calculate epsilon
-                epsilon = (np.log(self.im_Tstar) - mu_lnSaTstar) / sigma_lnSaTstar
+                
+                if epsilon is None:
+                    # Back calculate epsilon
+                    rup_eps = (np.log(im_Tstar) - mu_lnSaTstar) / sigma_lnSaTstar
+                else:
+                    rup_eps = epsilon[n]
+                    
                 # Get the value of the ln(CMS), conditioned on T_star
-                TgtMean[:,n] = mu_lnSaT + rho_T_Tstar * epsilon * sigma_lnSaT
+                TgtMean[:,n] = mu_lnSaT + rho_T_Tstar * rup_eps * sigma_lnSaT
                 
             elif self.cond == 0:
                 TgtMean[:,n] = mu_lnSaT 
@@ -347,12 +355,24 @@ class cs_master:
         
         TgtSigma_fin = np.sqrt(np.diagonal(TgtCov_fin))
         TgtSigma_fin[np.isnan(TgtSigma_fin)] = 0
-         
+
         # Add target spectrum to self
         self.mu_ln = TgtMean_fin
         self.sigma_ln = TgtSigma_fin
         self.T = T_Tgt
         self.cov = TgtCov_fin
+
+        if cond == 1:
+            # add intensity measure level to self
+            if epsilon is None:
+                self.im_Tstar = im_Tstar
+            else:
+                # indices where IM is going to be calculated
+                ind = []
+                for k in range(len(self.Tstar)):
+                    ind.append(np.where(self.T == self.Tstar[k])[0][0])
+                self.im_Tstar = np.exp(np.sum(self.mu_ln[ind])/len(self.Tstar))
+                self.epsilon = epsilon
         
         print('Coniditonal spectrum is created.')
 
@@ -413,20 +433,20 @@ class cs_master:
 
         Returns
         -------
-        sampleBig : numpy.darray
+        sampleBig : numpy.ndarray
             An array which contains the IMLs from filtered database.
-        soil_Vs30 : numpy.darray
+        soil_Vs30 : numpy.ndarray
             An array which contains the Vs30s from filtered database.
-        magnitude : numpy.darray
+        magnitude : numpy.ndarray
             An array which contains the magnitudes from filtered database.
-        Rjb : numpy.darray
+        Rjb : numpy.ndarray
             An array which contains the Rjbs from filtered database.
-        mechanism : numpy.darray
+        mechanism : numpy.ndarray
             An array which contains the fault type info from filtered database.
-        Filename_1 : numpy.darray
+        Filename_1 : numpy.ndarray
             An array which contains the filename of 1st gm component from filtered database.
             If selection is set to 1, it will include filenames of both components.
-        Filename_2 : numpy.darray
+        Filename_2 : numpy.ndarray
             An array which contains the filenameof 2nd gm component filtered database.
             If selection is set to 1, it will be None value.
 
@@ -434,7 +454,7 @@ class cs_master:
         
         if self.selection == 1: # SaKnown = Sa_arb
 
-            if self.database['Name'].startswith("NGA"):
+            if self.database['Name'].startswith('NGA'):
             
                 SaKnown    = np.append(self.database['Sa_1'],self.database['Sa_2'], axis=0)
                 soil_Vs30  = np.append(self.database['soil_Vs30'], self.database['soil_Vs30'], axis=0)
@@ -442,9 +462,12 @@ class cs_master:
                 Rjb        = np.append(self.database['Rjb'], self.database['Rjb'], axis=0)  
                 fault      = np.append(self.database['mechanism'], self.database['mechanism'], axis=0)
                 Filename_1 = np.append(self.database['Filename_1'], self.database['Filename_2'], axis=0)
+                
+                if self.database['Name'] == 'NGA_W2':
+                    NGA_num = np.append(self.database['NGA_num'],self.database['NGA_num'], axis=0)
             
             elif self.database['Name'].startswith("EXSIM"):
-                SaKnown = self.database['Sa_1']
+                SaKnown    = self.database['Sa_1']
                 soil_Vs30  = self.database['soil_Vs30']
                 Mw         = self.database['magnitude']
                 Rjb        = self.database['Rjb']
@@ -466,13 +489,30 @@ class cs_master:
             fault      = self.database['mechanism']
             Filename_1 = self.database['Filename_1']
             Filename_2 = self.database['Filename_2']
+            
+            if self.database['Name'] == 'NGA_W2':
+                NGA_num = self.database['NGA_num']
                 
         perKnown = self.database['Periods']        
         
         # Limiting the records to be considered using the `notAllowed' variable
         # notAllowed = []
         # Sa cannot be negative or zero, remove these.
-        notAllowed = np.unique(np.where(SaKnown <= 0)[0]).tolist() 
+        notAllowed = np.unique(np.where(SaKnown <= 0)[0]).tolist()
+        
+        # remove these as J. Baker does for this metadata
+        if self.database['Name'] == "NGA_W2":
+            temp1 = np.arange(4576,4839,1)
+            temp2 = np.arange(6992,8055,1)
+            temp3 = np.array([9193])
+            notAllowed.extend(temp1.tolist())
+            notAllowed.extend(temp2.tolist())
+            notAllowed.extend(temp3.tolist())
+            if self.selection == 1:
+                notAllowed.extend((self.database['NGA_num'][-1]+temp1).tolist())
+                notAllowed.extend((self.database['NGA_num'][-1]+temp2).tolist())
+                notAllowed.extend((self.database['NGA_num'][-1]+temp3).tolist())               
+            
         if not self.Vs30_lim is None: # limiting values on soil exist
             mask = (soil_Vs30 > min(self.Vs30_lim)) & (soil_Vs30 < max(self.Vs30_lim))
             temp = [i for i, x in enumerate(mask) if not x]
@@ -511,6 +551,11 @@ class cs_master:
             Filename_2 = None
         else:
             Filename_2 = Filename_2[Allowed]
+
+        if self.database['Name'] == "NGA_W2":
+            NGA_num    = NGA_num[Allowed]
+        else:
+            NGA_num = None
         
         # Arrange the available spectra in a usable format and check for invalid input
         # Match periods (known periods and periods for error computations)
@@ -524,7 +569,7 @@ class cs_master:
             print('NaNs found in input response spectra')
             sys.exit()
             
-        return sampleBig, soil_Vs30, Mw, Rjb, fault, Filename_1, Filename_2
+        return sampleBig, soil_Vs30, Mw, Rjb, fault, Filename_1, Filename_2, NGA_num
         
     def select(self, nGM=30, selection=1, Sa_def='RotD50', isScaled = 1, maxScale = 4,
                Mw_lim=None, Vs30_lim=None, Rjb_lim=None, fault_lim=None,
@@ -618,7 +663,7 @@ class cs_master:
         self.simulate_spectra() 
         
         # Search the database and filter
-        sampleBig, Vs30, Mw, Rjb, fault, Filename_1, Filename_2 = self.search_database()
+        sampleBig, Vs30, Mw, Rjb, fault, Filename_1, Filename_2, NGA_num = self.search_database()
         
         # Processing available spectra
         sampleBig = np.log(sampleBig)
@@ -629,15 +674,12 @@ class cs_master:
         finalScaleFac = np.ones((self.nGM))
         sampleSmall = np.ones((self.nGM,sampleBig.shape[1]))
         
-        # indices where AvgSa is going to be calculated
-        ind1 = []
-        ind2 = []
-        for k in range(len(self.Tstar)):
-            ind1.append(np.where(self.T == self.Tstar[k])[0][0])
-            ind2.append(np.where(self.T != self.Tstar[k])[0][0])
-            
-        # Length of IM period range
-        n = len(self.Tstar)
+        if self.cond == 1:
+            ind1 = [] # indices where IML is going to be calculated
+            ind2 = [] # indices where IML is not going to be calculated
+            for k in range(len(self.Tstar)):
+                ind1.append(np.where(self.T == self.Tstar[k])[0][0])
+                ind2.append(np.where(self.T != self.Tstar[k])[0][0])
         
         # Find nGM ground motions, inital subset
         for i in range(self.nGM):
@@ -650,7 +692,7 @@ class cs_master:
                 if self.isScaled == 1: # Calculate scaling facator
                 
                     if self.cond == 1: # Calculate using conditioning IML
-                        rec_iml=np.exp(np.sum(sampleBig[j,ind1])/n)
+                        rec_iml=np.exp(np.sum(sampleBig[j,ind1])/len(self.Tstar))
                         scaleFac[j] = self.im_Tstar/rec_iml
                         
                     elif self.cond == 0: # Calculate using minimization of mean squared root error
@@ -694,7 +736,7 @@ class cs_master:
 
                         if self.cond == 1: # Calculate using conditioning IML
                             # Calculate the intensity measure level (AvgSa or Sa)
-                            rec_Avg=np.exp(np.sum(sampleBig[j,ind1])/n)
+                            rec_Avg=np.exp(np.sum(sampleBig[j,ind1])/len(self.Tstar))
                             scaleFac[j] = self.im_Tstar/rec_Avg
                         
                         elif self.cond == 0: # Calculate using minimization of mean squared root error
@@ -734,12 +776,12 @@ class cs_master:
                 recID = np.concatenate((recID[:i],np.array([minID]),recID[i:]))
             
             # Lets check if the selected ground motions are good enough, if the errors are sufficiently small stop!
-            if len(ind1) != 1: # if conditioned on AvgSa
+            if self.cond == 1 and len(ind1) == 1: # if conditioned on SaT, ignore error at T*
+                medianErr = np.max(np.abs(np.exp(np.mean(sampleSmall[:,ind2],axis=0)) - np.exp(self.mu_ln[ind2]))/np.exp(self.mu_ln[ind2]))*100
+                stdErr = np.max(np.abs(np.std(sampleSmall[:,ind2], axis=0) - self.sigma_ln[ind2])/self.sigma_ln[ind2])*100  
+            else:
                 medianErr = np.max(np.abs(np.exp(np.mean(sampleSmall,axis=0)) - np.exp(self.mu_ln))/np.exp(self.mu_ln))*100
                 stdErr = np.max(np.abs(np.std(sampleSmall, axis=0) - self.sigma_ln)/self.sigma_ln)*100
-            else: # if conditioned on SaT
-                medianErr = np.max(np.abs(np.exp(np.mean(sampleSmall[:,ind2],axis=0)) - np.exp(self.mu_ln[ind2]))/np.exp(self.mu_ln[ind2]))*100
-                stdErr = np.max(np.abs(np.std(sampleSmall[:,ind2], axis=0) - self.sigma_ln[ind2])/self.sigma_ln[ind2])*100                
 
             if medianErr < self.tol and stdErr < self.tol:
                 break
@@ -765,6 +807,11 @@ class cs_master:
             self.rec_h2 = None
         elif self.selection == 2:
             self.rec_h2 = Filename_2[recID]
+
+        if self.database['Name'] == 'NGA_W2':
+            self.rec_rsn = NGA_num[recID]
+        else:
+            self.rec_rsn = None
             
     def write(self, cs = 0, recs = 1):
         
@@ -774,22 +821,21 @@ class cs_master:
             n = len(self.rec_h1)
             path_dts = os.path.join(self.outdir,'GMR_dts.txt')
             path_durs = os.path.join(self.outdir,'GMR_durs.txt')
-            path_H1 = os.path.join(self.outdir,'GMR_H1_names.txt')
             dts = np.zeros((n))
             durs = np.zeros((n))
-            h1s = open(path_H1, 'w')
+
             if not self.rec_h2 is None:
+                path_H1 = os.path.join(self.outdir,'GMR_H1_names.txt')
                 path_H2 = os.path.join(self.outdir,'GMR_H2_names.txt')
                 h2s = open(path_H2, 'w')
-            
+            else:
+                path_H1 = os.path.join(self.outdir,'GMR_names.txt')
+            h1s = open(path_H1, 'w')            
             if self.database['Name'] == 'NGA_W1':
     
-                folder = 'NGA_W1'
                 # save the first gm components
                 for i in range(n):
-                    file = self.rec_h1[i]
-                    temp1,temp2 = file.split('/'); temp2 = temp2[:-3] + 'at2'
-                    rec_path = os.path.join(folder,temp1.upper(),temp2)
+                    rec_path = self.database['Name']+'/'+self.rec_h1[i][:-3] + 'at2'
                     dts[i], _, _, t, inp_acc = ReadNGA(rec_path,zipName)
                     durs[i] = t[-1]
                     gmr_file = 'GMR_'+str(i+1)+'.txt'
@@ -805,9 +851,7 @@ class cs_master:
                 # save the second gm components
                 if not self.rec_h2 is None:
                     for i in range(n):
-                        file = self.rec_h2[i]
-                        temp1,temp2 = file.split('/'); temp2 = temp2[:-3] + 'at2'
-                        rec_path = os.path.join(folder,temp1.upper(),temp2)
+                        rec_path = self.database['Name']+'/'+self.rec_h2[i][:-3] + 'at2'
                         _, _, _, _, inp_acc = ReadNGA(rec_path,zipName)
                         gmr_file = 'GMR_'+str(n+i+1)+'.txt'
                         path = os.path.join(self.outdir,gmr_file)
@@ -818,12 +862,10 @@ class cs_master:
                     h2s.close()
     
             if self.database['Name'].startswith('EXSIM'):
-                folder = self.database['Name']
                 sf = 1/981 # cm/s**2 to g
                 for i in range(n):
-                    file = self.rec_h1[i]
-                    temp = file.split('_acc')[0]
-                    rec_path = os.path.join(folder,temp,file)
+                    temp = self.rec_h1[i].split('_acc')[0]
+                    rec_path = self.database['Name']+'/'+temp+'/'+self.rec_h1[i]
                     dts[i], _, _, t, inp_acc = ReadEXSIM(rec_path,zipName)
                     durs[i] = t[-1]
                     gmr_file = 'GMR_'+str(i+1)+'.txt'
@@ -898,11 +940,13 @@ class cs_master:
         plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
         plt.rc('legend', fontsize=MEDIUM_SIZE)   # legend fontsize
         plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
-        
-        if len(self.Tstar) == 1:
-            hatch = [self.Tstar*0.98, self.Tstar*1.02]
-        else:
-            hatch = [self.Tstar.min(), self.Tstar.max()]
+        plt.ioff()
+
+        if self.cond == 1:
+            if len(self.Tstar) == 1:
+                hatch = [self.Tstar*0.98, self.Tstar*1.02]
+            else:
+                hatch = [self.Tstar.min(), self.Tstar.max()]
 
         if cs == 1:
             # Plot Target spectrum vs. Simulated response spectra
@@ -1120,14 +1164,14 @@ def Sa_avg(bgmpe,scenario,T):
     scenario : list
         [sites, rup, dists] source, distance and site context 
         of openquake gmpe object for the specified scenario.
-    T : numpy.darray
+    T : numpy.ndarray
         Array of interested Periods (sec).
 
     Returns
     -------
-    Sa : numpy.darray
+    Sa : numpy.ndarray
         Mean of logarithmic average spectral acceleration prediction.
-    sigma : numpy.darray
+    sigma : numpy.ndarray
        logarithmic standard deviation of average spectral acceleration prediction.
 
     """
@@ -1178,10 +1222,10 @@ def rho_AvgSA_SA(bgmpe,scenario,T,Tstar):
     scenario : list
         [sites, rup, dists] source, distance and site context 
         of openquake gmpe object for the specified scenario.
-    T     : numpy.darray
+    T     : numpy.ndarray
         Array of interested Periods to calculate correlation coefficient.
 
-    Tstar : numpy.darray
+    Tstar : numpy.ndarray
         Period range where AvgSa is calculated.
 
     Returns
@@ -1217,9 +1261,9 @@ def get_RotDxx(Sa_1, Sa_2, xx, num_theta = 100):
 
     Parameters
     ----------
-    Sa_1 : numpy.darray
+    Sa_1 : numpy.ndarray
         Spectral acceleration values in direction 1.
-    Sa_2 : numpy.darray
+    Sa_2 : numpy.ndarray
         Spectral acceleration values in direction 2.
     xx : int
         Value of RoTDxx to compute.
@@ -1228,7 +1272,7 @@ def get_RotDxx(Sa_1, Sa_2, xx, num_theta = 100):
 
     Returns
     -------
-    RotDxx : numpy.darray
+    RotDxx : numpy.ndarray
         Value of IM.
 
     """
