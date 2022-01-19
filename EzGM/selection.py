@@ -518,7 +518,7 @@ class utility:
             if show == 1:
                 plt.show()
 
-        if type(self).__name__ == 'tbdy_2018':
+        if type(self).__name__ == 'tbec_2018':
 
             hatch = [self.Tp * 0.2, self.Tp * 1.5]
             # Plot Target spectrum vs. Selected response spectra
@@ -1774,6 +1774,13 @@ class conditional_spectrum(utility):
         Baker JW. Conditional Mean Spectrum: Tool for Ground-Motion Selection.
         Journal of Structural Engineering 2011; 137(3): 322–331.
         DOI: 10.1061/(ASCE)ST.1943-541X.0000215.
+
+        Lin, T., Harmsen, S. C., Baker, J. W., & Luco, N. (2013). 
+        Conditional Spectrum Computation Incorporating Multiple Causal Earthquakes 
+        and Ground-Motion Prediction Models. In Bulletin of the Seismological Society 
+        of America (Vol. 103, Issue 2A, pp. 1103–1116). Seismological Society of 
+        America (SSA). https://doi.org/10.1785/0120110293
+
         Kohrangi, M., Bazzurro, P., Vamvatsikos, D., and Spillatura, A.
         Conditional spectrum-based ground motion record selection using average 
         spectral acceleration. Earthquake Engineering & Structural Dynamics, 
@@ -2040,7 +2047,6 @@ class conditional_spectrum(utility):
         A computationally efficient ground-motion selection algorithm for 
         matching a target response spectrum mean and variance.
         Earthquake Spectra, 27(3), 797-815.
-        
         
         Parameters
         ----------
@@ -2310,11 +2316,11 @@ class conditional_spectrum(utility):
             self.rec_station_code = station_code[recID]
 
 
-class tbdy_2018(utility):
+class tbec_2018(utility):
     """
     This class is used to
-        1) Create target spectrum based on TBDY2018
-        2) Selecting and scaling suitable ground motion sets for target spectrum in accordance with TBDY2018
+        1) Create target spectrum based on TBEC2018
+        2) Selecting and scaling suitable ground motion sets for target spectrum in accordance with TBEC2018
             - Currently, only supports the record selection from NGA_W2 record database
     """
 
@@ -2349,7 +2355,7 @@ class tbdy_2018(utility):
         self.create_dir(self.outdir)
 
     @staticmethod
-    def get_Sae_tbdy2018(T, Lat, Long, DD, Soil):
+    def get_Sae_tbec2018(T, Lat, Long, DD, Soil):
         """
         Details
         -------
@@ -2380,7 +2386,7 @@ class tbdy_2018(utility):
             Elastic acceleration response spectrum
         """
 
-        csv_file = 'Parameters_TBDY2018.csv'
+        csv_file = 'Parameters_TBEC2018.csv'
         file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Meta_Data', csv_file)
         data = pd.read_csv(file_path)
 
@@ -2520,7 +2526,7 @@ class tbdy_2018(utility):
         Details
         -------
         Select the suitable ground motion set
-        in accordance with TBDY 2018.
+        in accordance with TBEC 2018.
         
         Rule 1: Mean of selected records should remain above the lower bound target spectra.
             For selection = 1: Sa_rec = (Sa_1 or Sa_2) - lower bound = 1.0 * SaTarget(0.2Tp-1.5Tp) 
@@ -2613,7 +2619,7 @@ class tbdy_2018(utility):
         self.T = perKnown[(perKnown >= 0.2 * self.Tp) * (perKnown <= 1.5 * self.Tp)]
 
         # Determine the lower bound spectra
-        target_spec = self.get_Sae_tbdy2018(self.T, Lat, Long, DD, Soil)
+        target_spec = self.get_Sae_tbec2018(self.T, Lat, Long, DD, Soil)
         if self.selection == 1:
             target_spec = 1.0 * target_spec
         elif self.selection == 2:
@@ -2799,9 +2805,9 @@ class tbdy_2018(utility):
         self.rec_spec = rec_spec
         self.T = self.database['Periods']
         if self.selection == 1:
-            self.target = self.get_Sae_tbdy2018(self.T, Lat, Long, DD, Soil)
+            self.target = self.get_Sae_tbec2018(self.T, Lat, Long, DD, Soil)
         elif self.selection == 2:
-            self.target = self.get_Sae_tbdy2018(self.T, Lat, Long, DD, Soil) * 1.3
+            self.target = self.get_Sae_tbec2018(self.T, Lat, Long, DD, Soil) * 1.3
 
         print('Ground motion selection is finished scaling factor is %.3f' % self.rec_scale)
 
