@@ -987,7 +987,7 @@ class utility:
                     temp1[:npts1] = inp_acc1
                     inp_acc1=temp1.copy()
                     temp2 = np.zeros(npts)
-                    temp2[:npts1] = inp_acc2
+                    temp2[:npts2] = inp_acc2
                     inp_acc2=temp2.copy()
 
                     # Accelerations for H2 component
