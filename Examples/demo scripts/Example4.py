@@ -10,9 +10,18 @@ start_time = time()
 spec = ec8_part1(database='NGA_W2', outdir='Outputs')
 
 # 2.) Select the ground motions
-spec.select(ag=0.2,xi=0.05, I=1.0, Type='Type1',Soil='A', nGM=11, selection=1, Tp=1,
+# Use site parameters to define target spectrum for selection
+spec.select(ag=0.2,xi=0.05, I=1.0, Type='Type1',Soil='A', nGM=7, selection=1, Tp=1,
            Mw_lim=[6.5, 8], Vs30_lim=[200, 700], Rjb_lim=[0, 20], fault_lim=None, opt=0, 
            maxScale=2)
+
+# Use user-defined target spectrum for selection
+# import os
+# parent_path = os.path.dirname(os.path.realpath(""))
+# target_path = os.path.join(parent_path,'input files','EC8_Part1.txt')
+# spec.select(target_path=target_path, nGM=7, selection=1, Tp=1,
+#            Mw_lim=[6.5, 8], Vs30_lim=[200, 700], Rjb_lim=[0, 20], fault_lim=None, opt=0,
+#            maxScale=2)
 
 # selected records can be plotted at this stage
 spec.plot(save=1, show=1)

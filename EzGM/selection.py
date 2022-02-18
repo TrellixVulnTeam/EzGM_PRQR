@@ -2519,14 +2519,15 @@ class tbec_2018(utility):
 
         return Sae
 
-    def select(self, Lat=41.0582, Long=29.00951, DD=2, Soil='ZC', nGM=11, selection=1, Tp=1,
+    def select(self, target_path=None, Lat=41.0582, Long=29.00951, DD=2, Soil='ZC', nGM=11, selection=1, Tp=1,
                Mw_lim=None, Vs30_lim=None, Rjb_lim=None, fault_lim=None, opt=1,
                maxScale=2, weights=[1, 1]):
         """
         Details
         -------
         Select the suitable ground motion set
-        in accordance with TBEC 2018.
+        in accordance with TBEC 2018. User may define the target spectrum or
+        use the code spectrum directly by inserting site parameters.
         
         Rule 1: Mean of selected records should remain above the lower bound target spectra.
             For selection = 1: Sa_rec = (Sa_1 or Sa_2) - lower bound = 1.0 * SaTarget(0.2Tp-1.5Tp) 
@@ -2541,6 +2542,8 @@ class tbec_2018(utility):
 
         Parameters
         ----------
+        target_path = str, optional, the default is None.
+            Path for used defined target spectrum.
         Lat: float, optional, the default is 41.0582.
             Site latitude
         Long: float, optional, the default is 29.00951.
@@ -2618,13 +2621,20 @@ class tbec_2018(utility):
         perKnown = self.database['Periods']
         self.T = perKnown[(perKnown >= 0.2 * self.Tp) * (perKnown <= 1.5 * self.Tp)]
 
-        # Determine the lower bound spectra
-        target_spec = self.get_Sae_tbec2018(self.T, Lat, Long, DD, Soil)
-        if self.selection == 1:
-            target_spec = 1.0 * target_spec
-        elif self.selection == 2:
-            target_spec = 1.3 * target_spec
-            self.Sa_def = 'SRSS'
+        # Use the specified target spectrum
+        if target_path:
+            data = np.loadtxt(target_path)
+            func = interpolate.interp1d(data[:,0],data[:,1], kind='linear', fill_value='extrapolate')
+            target_spec = func(self.T)
+
+        # Determine the lower bound spectra from code
+        else:
+            target_spec = self.get_Sae_tbec2018(self.T, Lat, Long, DD, Soil)
+            if self.selection == 1:
+                target_spec = 1.0 * target_spec
+            elif self.selection == 2:
+                target_spec = 1.3 * target_spec
+                self.Sa_def = 'SRSS'
 
         # Search the database and filter
         sampleBig, Vs30, Mw, Rjb, fault, Filename_1, Filename_2, NGA_num, eq_ID_, station_code = self.search_database()
@@ -2804,7 +2814,10 @@ class tbec_2018(utility):
         # Save the results for whole spectral range
         self.rec_spec = rec_spec
         self.T = self.database['Periods']
-        if self.selection == 1:
+
+        if target_path:
+            self.target = func(self.T)
+        elif self.selection == 1:
             self.target = self.get_Sae_tbec2018(self.T, Lat, Long, DD, Soil)
         elif self.selection == 2:
             self.target = self.get_Sae_tbec2018(self.T, Lat, Long, DD, Soil) * 1.3
@@ -2934,22 +2947,28 @@ class ec8_part1(utility):
 
         return Sae
 
-    def select(self, ag=0.2, xi=0.05, I=1.0, Type='Type1', Soil='A', nGM=3, selection=1, Tp=1,
+    def select(self, target_path=None, ag=0.2, xi=0.05, I=1.0, Type='Type1', Soil='A', nGM=3, selection=1, Tp=1,
                Mw_lim=None, Vs30_lim=None, Rjb_lim=None, fault_lim=None, opt=1,
                maxScale=2, weights=[1, 1]):
         """
         Details
         -------
-        Select the suitable ground motion set
-        in accordance with EC8 - PART 1
+        Select the suitable ground motion set in accordance with EC8 - PART 1.
+        User may define the target spectrum or
+        use the code spectrum directly by inserting site parameters.
         
         Mean of selected records should remain above the lower bound target spectra.
             For selection = 1: Sa_rec = (Sa_1 or Sa_2) - lower bound = 0.9 * SaTarget(0.2Tp-2.0Tp)
             For Selection = 2: Sa_rec = (Sa_1+Sa_2)*0.5 - lower bound = 0.9 * SaTarget(0.2Tp-2.0Tp)
-            Always Sa(T=0) > Sa(T=0)_target
+            PGA_record > PGA_target
+
+            Note: Here we assume SA(T[0])=PGA, where T[0] is 0.01 for both databases.
+            Not a bad assumption since it is very close to PGA.
             
         Parameters
         ----------
+        target_path = str, optional, the default is None.
+            Path for used defined target spectrum.
         ag:  float, optional, the default is 0.25.
             Peak ground acceleration [g]
         xi: float, optional, the default is 0.05.
@@ -3030,8 +3049,16 @@ class ec8_part1(utility):
         self.T = np.append(self.database['Periods'][0], self.database['Periods'][
             (self.database['Periods'] >= 0.2 * self.Tp) * (self.database['Periods'] <= 2.0 * self.Tp)])
 
-        # Determine the lower bound spectra
-        target_spec = self.get_Sae_EC8(ag, xi, self.T, I, Type, Soil)
+        # Use the specified target spectrum
+        if target_path:
+            data = np.loadtxt(target_path)
+            func = interpolate.interp1d(data[:,0],data[:,1], kind='linear', fill_value='extrapolate')
+            target_spec = func(self.T)
+
+        # Determine the lower bound spectra from code
+        else:
+            # Determine the lower bound spectra
+            target_spec = self.get_Sae_EC8(ag, xi, self.T, I, Type, Soil)
         target_spec[1:] = 0.9 * target_spec[1:]  # lower bound spectra except PGA
 
         if self.selection == 2:
@@ -3184,6 +3211,9 @@ class ec8_part1(utility):
 
         # Save the results for whole spectral range
         self.T = self.database['Periods']
-        self.design_spectrum = self.get_Sae_EC8(ag, xi, self.T, I, Type, Soil)
+        if target_path:
+            self.design_spectrum = func(self.T)
+        else:
+            self.design_spectrum = self.get_Sae_EC8(ag, xi, self.T, I, Type, Soil)
 
         print('Ground motion selection is finished scaling factor is %.3f' % self.rec_scale)
