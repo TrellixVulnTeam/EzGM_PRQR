@@ -1,39 +1,62 @@
-#####################################
-# EC8 Part 1 Based Record Selection #
-#####################################
+####################################################
+## Showcase for seismic signal processing toolbox ##
+####################################################
 
-from EzGM.selection import ec8_part1
+from EzGM import signal
+from EzGM.utility import ReadNGA, run_time
 from time import time
+import numpy as np
+import matplotlib.pyplot as plt
+import os
 
+# Acquire the run start time
 start_time = time()
-# 1.) Initialize the tbdy_2018 object for record selection
-spec = ec8_part1(database='NGA_W2', outdir='Outputs')
 
-# 2.) Select the ground motions
-# Use site parameters to define target spectrum for selection
-spec.select(ag=0.2,xi=0.05, I=1.0, Type='Type1',Soil='A', nGM=7, selection=1, Tp=1,
-           Mw_lim=[6.5, 8], Vs30_lim=[200, 700], Rjb_lim=[0, 20], fault_lim=None, opt=0, 
-           maxScale=2)
+# Read records
+parent_path = os.path.dirname(os.path.realpath(""))
+gm_path1 = os.path.join(parent_path, 'input files', 'RSN1158_KOCAELI_DZC180.AT2')
+gm_path2 = os.path.join(parent_path, 'input files', 'RSN1158_KOCAELI_DZC270.AT2')
+dt, npts, desc, t, Ag1 = ReadNGA(inFilename= gm_path1, content=None, outFilename=None)
+dt, npts, desc, t, Ag2 = ReadNGA(inFilename= gm_path2, content=None, outFilename=None)
 
-# Use user-defined target spectrum for selection
-# import os
-# parent_path = os.path.dirname(os.path.realpath(""))
-# target_path = os.path.join(parent_path,'input files','EC8_Part1.txt')
-# spec.select(target_path=target_path, nGM=7, selection=1, Tp=1,
-#            Mw_lim=[6.5, 8], Vs30_lim=[200, 700], Rjb_lim=[0, 20], fault_lim=None, opt=0,
-#            maxScale=2)
+# Apply baseline correction
+Ag_corrected = signal.baseline_correction(Ag1, dt, polynomial_type='Linear')
 
-# selected records can be plotted at this stage
-spec.plot(save=1, show=1)
+# Apply band-pass filtering
+Ag_filtered = signal.butterworth_filter(Ag1, dt, cut_off=(0.1, 25))
 
-# 3.) If database == 'NGA_W2' you can first download the records via nga_download method
-# from NGA-West2 Database [http://ngawest2.berkeley.edu/] and then use write method
-spec.ngaw2_download(username = 'example_username@email.com', pwd = 'example_password123456', sleeptime = 3, browser = 'chrome')
+# Linear elastic analysis of a single degree of freedom system
+u, v, ac, ac_tot = signal.sdof_ltha(Ag1, dt, T = 1.0, xi = 0.05, m = 1)
 
-# 4.) If you have records already inside recs_f\database.zip\database or
-# downloaded records for database = NGA_W2 case, write whatever you want,
-# the object itself, selected and scaled time histories
-spec.write(obj=1, recs=1, recs_f='')
+# Calculate ground motion parameters
+param1 = signal.get_parameters(Ag1, dt, T = np.arange(0,4.05,0.05), xi = 0.05)
+param2 = signal.get_parameters(Ag2, dt, T = np.arange(0,4.05,0.05), xi = 0.05)
+
+# Obtain RotDxx Spectrum
+Periods, Sa_RotDxx = signal.RotDxx_spectrum(Ag1, Ag2, dt, T = np.arange(0,4.05,0.05), xi = 0.05, xx = [0, 50, 100])
+
+# Since the NGAW2 records are already processed we will not see any difference.
+plt.figure()
+plt.plot(t, Ag1, label='Component 1 - raw')
+plt.plot(t, Ag_corrected, label='Component 1 - corrected')
+plt.plot(t, Ag_filtered, label='Component 1 - filtered')
+plt.legend()
+plt.grid(True)
+plt.xlabel('Time [sec]')
+plt.ylabel('Acceleration [g]')
+plt.show()
+
+plt.figure()
+plt.plot(param1['Periods'], param1['PSa'], label='Sa1')
+plt.plot(param2['Periods'], param2['PSa'], label='Sa2')
+plt.plot(Periods, Sa_RotDxx[0], label='RotD00')
+plt.plot(Periods, Sa_RotDxx[1], label='RotD50')
+plt.plot(Periods, Sa_RotDxx[2], label='RotD100')
+plt.legend()
+plt.grid(True)
+plt.xlabel('Period [sec]')
+plt.ylabel('Sa [g]')
+plt.show()
 
 # Calculate the total time passed
-spec.run_time(start_time)
+run_time(start_time)

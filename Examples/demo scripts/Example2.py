@@ -1,40 +1,55 @@
-########################################################################
-# Conditional Spectrum (CS) Based Record Selection - IM = AvgSa(Tstar) #
-########################################################################
+######################################################
+# Record Selection in Accordance with Building Codes #
+######################################################
 
-from EzGM.selection import conditional_spectrum
+from EzGM.selection import code_spectrum
+from EzGM.utility import run_time
 from time import time
-import numpy as np
+import os
+
+# Path to user-defined target spectrum
+parent_path = os.path.dirname(os.path.realpath(""))
+target_path = os.path.join(parent_path,'input files','Target_Spectrum.txt')
+
+# if target_path=none, target spectrum is generated based on site parameters, and specified code
+# Comment the next line if you want to use the user-defined spectrum.
+target_path=None 
 
 start_time = time()
-# 1.) Initialize the conditional_spectrum object for record selection, check which parameters are required for the gmpe you are using.
-cs = conditional_spectrum(Tstar=np.arange(0.1, 1.1, 0.1), gmpe='AkkarEtAlRjb2014', database='NGA_W2', pInfo=1)
+# 1.) Initialize the code_spectrum object for record selection
 
-# 2.) Create target spectrum
-cs.create(site_param={'vs30': 500}, rup_param={'rake': [0.0], 'mag': [7.5]},
-          dist_param={'rjb': [10]}, Hcont=None, T_Tgt_range=[0.05, 2.5],
-          im_Tstar=1.5, epsilon=None, cond=1, useVar=1, corr_func='akkar',
-          outdir='Outputs')
+# Define the target spectrum
+spec = code_spectrum(database='NGA_W2', outdir='Outputs', target_path=target_path, nGM=11, selection=2,
+            Mw_lim=[6.5, 8], Vs30_lim=[200, 700], Rjb_lim=[0, 20], fault_lim=None, opt=2, 
+            maxScale=2, weights=[1, 1], RecPerEvent=3)
 
-# Target spectrum can be plotted at this stage
-cs.plot(tgt=1, sim=0, rec=0, save=1, show=1)
+# 2.) Select the ground motions
+# If no user-defined spectrum is targeted, site parameters must be inserted by user to construct target spectrum
+# Comment on lines associated with building code that you are not interested.
 
-# 3.) Select the ground motions
-cs.select(nGM=10, selection=1, Sa_def='RotD50', isScaled=1, maxScale=4,
-          Mw_lim=[5.5,8], Vs30_lim=[360,760], Rjb_lim=[0,50], fault_lim=None, nTrials=20,
-          weights=[1, 2, 0.3], seedValue=0, nLoop=2, penalty=1, tol=10)
+# 2.a) According to TBEC 2018 (Turkish Building Earthquake Code)
+spec.tbec2018(Lat=41.0582, Long=29.00951, DD=2, SiteClass='ZC', Tp=1)
+# selected records can be plotted at this stage
+spec.plot(save=1, show=1)
 
-# The simulated spectra and spectra of selected records can be plotted at this stage
-cs.plot(tgt=0, sim=1, rec=1, save=1, show=1)
+# 2.b) According to ASCE 7-16 (Minimum Design Loads and Associated Criteria for Buildings and Other Structures, 2016)
+spec.asce7_16(Lat=34, Long=-118, RiskCat='II', SiteClass='C', T1_small=1, T1_big=1, Tlower = None, Tupper = None)
+# selected records can be plotted at this stage
+spec.plot(save=1, show=1)
 
-# 4.) If database == 'NGA_W2' you can first download the records via nga_download method
+# 2.c) According to EC8-1 (Eurocode 8 Part 1)
+spec.ec8_part1(ag=0.2, xi=0.05, ImpClass='II', Type='Type1', SiteClass='C', Tp=1)
+# selected records can be plotted at this stage
+spec.plot(save=1, show=1)
+
+# 3.) If database == 'NGA_W2' you can first download the records via nga_download method
 # from NGA-West2 Database [http://ngawest2.berkeley.edu/] and then use write method
-cs.ngaw2_download(username = 'example_username@email.com', pwd = 'example_password123456', sleeptime = 3, browser = 'chrome')
+spec.ngaw2_download(username = 'example_username@email.com', pwd = 'example_password123456', sleeptime = 3, browser = 'chrome')
 
-# 5.) If you have records already inside recs_f\database.zip\database or
+# 4.) If you have records already inside recs_f\database.zip\database or
 # downloaded records for database = NGA_W2 case, write whatever you want,
 # the object itself, selected and scaled time histories
-cs.write(obj=1, recs=1, recs_f='')
+spec.write(obj=1, recs=1, recs_f='')
 
 # Calculate the total time passed
-cs.run_time(start_time)
+run_time(start_time)

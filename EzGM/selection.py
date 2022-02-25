@@ -1,19 +1,15 @@
 """
-Record Selection ToolBox
+Ground motion record selection functions
 """
 
 # Import python libraries
 import copy
-import errno
 import os
 import pickle
 import shutil
-import stat
 import sys
 import zipfile
-import difflib
-from time import gmtime, time, sleep
-import pandas as pd
+from time import gmtime, sleep
 import numpy as np
 import numpy.matlib
 from scipy import interpolate
@@ -26,101 +22,19 @@ from selenium import webdriver
 from webdriverdownloader import ChromeDriverDownloader, GeckoDriverDownloader
 from numba import njit
 from openquake.hazardlib import gsim, imt, const
+from .utility import create_dir, ContentFromZip, ReadNGA, ReadESM
+from .utility import SiteParam_tbec2018, Sae_tbec2018, SiteParam_asce7_16, Sae_asce7_16, Sae_ec8_part1
 
 
-class utility:
+class _subclass_:
+    """
+    Details
+    -------
+    This subclass contains common methods inherited by the two parent classes:
+     conditional_spectrum and code_spectrum.
+    """
 
-    @staticmethod
-    def run_time(start_time):
-        """
-        Details
-        -------
-        Prints the time passed between startTime and FinishTime (now)
-        in hours, minutes, seconds. startTime is a global variable.
-
-        Parameters
-        ----------
-        start_time : int
-            The initial time obtained via time().
-
-        Returns
-        -------
-        None.
-        """
-
-        finish_time = time()
-        # Procedure to obtained elapsed time in Hr, Min, and Sec
-        time_seconds = finish_time - start_time
-        time_minutes = int(time_seconds / 60)
-        time_hours = int(time_seconds / 3600)
-        time_minutes = int(time_minutes - time_hours * 60)
-        time_seconds = time_seconds - time_minutes * 60 - time_hours * 3600
-        print("Run time: %d hours: %d minutes: %.2f seconds" % (time_hours, time_minutes, time_seconds))
-
-    #############################################################################################
-    ################# Methods for OpenQuake Hazard Library Manipulation #########################
-    #############################################################################################
-
-    @staticmethod
-    def get_available_gmpes():
-        """
-        Details
-        -------
-        Retrieves available ground motion prediction equations (gmpe) in OpenQuake.
-
-        Parameters
-        ----------
-        None.
-
-        Returns
-        -------
-        gmpes : dict
-            Dictionary which contains available gmpes in openquake.
-        """
-
-        gmpes = {}
-        for name, gmpe in gsim.get_available_gsims().items():
-            gmpes[name] = gmpe
-
-        return gmpes
-
-    @staticmethod
-    def check_gmpe_attributes(gmpe):
-        """
-        Details
-        -------
-        Checks the attributes for ke.
-
-        Parameters
-        ----------
-        gmpe : str
-            gmpe name for which attributes going to be checked
-
-        Returns
-        -------
-        None.
-        """
-
-        bgmpe = gsim.get_available_gsims()[gmpe]()
-        print('GMPE name: %s' % gmpe)
-        print('Supported tectonic region: %s' % bgmpe.DEFINED_FOR_TECTONIC_REGION_TYPE)
-        print('Supported standard deviation: %s' % ', '.join([std for std in bgmpe.DEFINED_FOR_STANDARD_DEVIATION_TYPES]))
-        print('Supported intensity measure: %s' % ', '.join([imt.__name__ for imt in bgmpe.DEFINED_FOR_INTENSITY_MEASURE_TYPES]))
-        print('Supported intensity measure component: %s' % bgmpe.DEFINED_FOR_INTENSITY_MEASURE_COMPONENT)
-        try:
-            sa_keys = list(bgmpe.COEFFS.sa_coeffs.keys())
-            print('Supported SA period range: %s' % ' - '.join([str(sa_keys[0].period), str(sa_keys[-1].period)]))
-        except:
-            pass
-        print('Required distance parameters: %s' % ', '.join([dist for dist in bgmpe.REQUIRES_DISTANCES]))
-        print('Required rupture parameters: %s' % ', '.join([rup for rup in bgmpe.REQUIRES_RUPTURE_PARAMETERS]))
-        print('Required site parameters: %s'  % ', '.join([site for site in bgmpe.REQUIRES_SITES_PARAMETERS]))
-
-    #############################################################################################
-    ######################## Methods to manipulate used databases ###############################
-    #############################################################################################
-
-    def search_database(self):
+    def _search_database(self):
         """
 
         Details
@@ -165,31 +79,21 @@ class utility:
 
         if self.selection == 1:  # SaKnown = Sa_arb
 
-            if self.database['Name'].startswith("EXSIM"):
-                SaKnown = self.database['Sa_1']
-                soil_Vs30 = self.database['soil_Vs30']
-                Mw = self.database['magnitude']
-                Rjb = self.database['Rjb']
-                fault = self.database['mechanism']
-                Filename_1 = self.database['Filename_1']
-                eq_ID = self.database['EQID']
+            SaKnown = np.append(self.database['Sa_1'], self.database['Sa_2'], axis=0)
+            soil_Vs30 = np.append(self.database['soil_Vs30'], self.database['soil_Vs30'], axis=0)
+            Mw = np.append(self.database['magnitude'], self.database['magnitude'], axis=0)
+            Rjb = np.append(self.database['Rjb'], self.database['Rjb'], axis=0)
+            fault = np.append(self.database['mechanism'], self.database['mechanism'], axis=0)
+            Filename_1 = np.append(self.database['Filename_1'], self.database['Filename_2'], axis=0)
+            eq_ID = np.append(self.database['EQID'], self.database['EQID'], axis=0)
 
-            else:
-                SaKnown = np.append(self.database['Sa_1'], self.database['Sa_2'], axis=0)
-                soil_Vs30 = np.append(self.database['soil_Vs30'], self.database['soil_Vs30'], axis=0)
-                Mw = np.append(self.database['magnitude'], self.database['magnitude'], axis=0)
-                Rjb = np.append(self.database['Rjb'], self.database['Rjb'], axis=0)
-                fault = np.append(self.database['mechanism'], self.database['mechanism'], axis=0)
-                Filename_1 = np.append(self.database['Filename_1'], self.database['Filename_2'], axis=0)
-                eq_ID = np.append(self.database['EQID'], self.database['EQID'], axis=0)
+            if self.database['Name'] == "NGA_W2":
+                NGA_num = np.append(self.database['NGA_num'], self.database['NGA_num'], axis=0)
 
-                if self.database['Name'] == "NGA_W2":
-                    NGA_num = np.append(self.database['NGA_num'], self.database['NGA_num'], axis=0)
+            elif self.database['Name'] == "ESM_2018":
+                station_code = np.append(self.database['station_code'], self.database['station_code'], axis=0)
 
-                elif self.database['Name'] == "ESM_2018":
-                    station_code = np.append(self.database['station_code'], self.database['station_code'], axis=0)
-
-        elif self.selection == 2:  # SaKnown = Sa_g.m. or RotD50
+        elif self.selection == 2:
 
             if self.Sa_def == 'GeoMean':
                 SaKnown = np.sqrt(self.database['Sa_1'] * self.database['Sa_2'])
@@ -199,6 +103,8 @@ class utility:
                 SaKnown = (self.database['Sa_1'] + self.database['Sa_2']) / 2
             elif self.Sa_def == 'RotD50':  # SaKnown = Sa_RotD50.
                 SaKnown = self.database['Sa_RotD50']
+            elif self.Sa_def == 'RotD100':  # SaKnown = Sa_RotD100.
+                SaKnown = self.database['Sa_RotD100']
             else:
                 raise ValueError('Unexpected Sa definition, exiting...')
 
@@ -273,9 +179,6 @@ class utility:
         elif self.database['Name'] == "ESM_2018":
             NGA_num = None
             station_code = station_code[Allowed]
-        elif self.database['Name'].startswith("EXSIM"):
-            NGA_num = None
-            station_code = None
 
         # Arrange the available spectra in a usable format and check for invalid input
         # Match periods (known periods and periods for error computations)
@@ -295,9 +198,131 @@ class utility:
 
         return sampleBig, soil_Vs30, Mw, Rjb, fault, Filename_1, Filename_2, NGA_num, eq_ID, station_code
 
-    #############################################################################################
-    ############################### Methods to plot stuff #######################################
-    #############################################################################################
+    def write(self, obj=0, recs=1, recs_f=''):
+        """
+        Details
+        -------
+        Writes the cs_master object, selected and scaled records.
+
+        Parameters
+        ----------
+        obj : int, optional
+            flag to write the object into the pickle file. The default is 0.
+        recs : int, optional
+            flag to write the selected and scaled time histories.
+            The default is 1.
+        recs_f : str, optional
+            This is option could be used if the user already has all the
+            records in database. This is the folder path which contains
+            "database.zip" file. The records must be placed inside
+            recs_f/database.zip/database/
+            The default is ''.
+
+        Notes
+        -----
+        0: no, 1: yes
+
+        Returns
+        -------
+        None.
+        """
+
+        if recs == 1:
+            # set the directories and file names
+            try:  # this will work if records are downloaded
+                zipName = self.Unscaled_rec_file
+            except:
+                zipName = os.path.join(recs_f, self.database['Name'] + '.zip')
+            n = len(self.rec_h1)
+            path_dts = os.path.join(self.outdir, 'GMR_dts.txt')
+            dts = np.zeros(n)
+            path_H1 = os.path.join(self.outdir, 'GMR_names.txt')
+            if self.selection == 2:
+                path_H1 = os.path.join(self.outdir, 'GMR_H1_names.txt')
+                path_H2 = os.path.join(self.outdir, 'GMR_H2_names.txt')
+                h2s = open(path_H2, 'w')
+            h1s = open(path_H1, 'w')
+
+            # Get record paths for # NGA_W2 or ESM_2018
+            if zipName != os.path.join(recs_f, self.database['Name'] + '.zip'):
+                rec_paths1 = self.rec_h1
+                if self.selection == 2:
+                    rec_paths2 = self.rec_h2
+            else:
+                rec_paths1 = [self.database['Name'] + '/' + self.rec_h1[i] for i in range(n)]
+                if self.selection == 2:
+                    rec_paths2 = [self.database['Name'] + '/' + self.rec_h2[i] for i in range(n)]
+
+            # Read contents from zipfile
+            contents1 = ContentFromZip(rec_paths1, zipName)  # H1 gm components
+            if self.selection == 2:
+                contents2 = ContentFromZip(rec_paths2, zipName)  # H2 gm components
+
+            # Start saving records
+            for i in range(n):
+                # This is necessary, since scale factor is a single value for code-based selection
+                if type(self.rec_scale) is float:
+                    SF = self.rec_scale
+                else:
+                    SF = self.rec_scale[i]
+
+                # Read the record files
+                if self.database['Name'].startswith('NGA'):  # NGA
+                    dts[i], npts1, _, _, inp_acc1 = ReadNGA(inFilename=self.rec_h1[i], content=contents1[i])
+                    gmr_file1 = self.rec_h1[i].replace('/', '_')[:-4] + '_SF_' + "{:.3f}".format(SF) + '.txt'
+                    if self.selection == 2:  # H2 component
+                        _, npts2, _, _, inp_acc2 = ReadNGA(inFilename=self.rec_h2[i], content=contents2[i])
+                        gmr_file2 = self.rec_h2[i].replace('/', '_')[:-4] + '_SF_' + "{:.3f}".format(SF) + '.txt'
+
+                elif self.database['Name'].startswith('ESM'):  # ESM
+                    dts[i], npts1, _, _, inp_acc1 = ReadESM(inFilename=self.rec_h1[i], content=contents1[i])
+                    gmr_file1 = self.rec_h1[i][:-4] + '_SF_' + "{:.3f}".format(SF) + '.txt'
+                    if self.selection == 2:  # H2 component
+                        _, npts2, _, _, inp_acc2 = ReadESM(inFilename=self.rec_h2[i], content=contents2[i])
+                        gmr_file2 = self.rec_h2[i][:-4] + '_SF_' + "{:.3f}".format(SF) + '.txt'
+
+                # Write the record files
+                if self.selection == 2:
+                    # ensure that two acceleration signals have the same length, if not add zeros.
+                    npts = max(npts1, npts2)
+                    temp1 = np.zeros(npts)
+                    temp1[:npts1] = inp_acc1
+                    inp_acc1 = temp1.copy()
+                    temp2 = np.zeros(npts)
+                    temp2[:npts2] = inp_acc2
+                    inp_acc2 = temp2.copy()
+
+                    # Accelerations for H2 component
+                    path = os.path.join(self.outdir, gmr_file2)
+                    acc_Sc = SF * inp_acc2
+                    np.savetxt(path, acc_Sc, fmt='%1.4e')
+                    h2s.write(gmr_file2 + '\n')
+
+                # Accelerations for H1 component
+                path = os.path.join(self.outdir, gmr_file1)
+                acc_Sc = SF * inp_acc1
+                np.savetxt(path, acc_Sc, fmt='%1.4e')
+                h1s.write(gmr_file1 + '\n')
+            # Time steps
+            np.savetxt(path_dts, dts, fmt='%.5f')
+            h1s.close()
+            if self.selection == 2:
+                h2s.close()
+
+        if obj == 1:
+            # save some info as pickle obj
+            path_obj = os.path.join(self.outdir, 'obj.pkl')
+            obj = vars(copy.deepcopy(self))  # use copy.deepcopy to create independent obj
+            obj['database'] = self.database['Name']
+            del obj['outdir']
+
+            if 'bgmpe' in obj:
+                del obj['bgmpe']
+
+            with open(path_obj, 'wb') as file:
+                pickle.dump(obj, file)
+
+        print('Finished writing process, the files are located in\n%s' % self.outdir)
 
     def plot(self, tgt=0, sim=0, rec=1, save=0, show=1):
         """
@@ -518,15 +543,30 @@ class utility:
             if show == 1:
                 plt.show()
 
-        if type(self).__name__ == 'tbec_2018':
+        if type(self).__name__ == 'code_spectrum':
 
-            hatch = [self.Tp * 0.2, self.Tp * 1.5]
+            hatch = [self.Tlower, self.Tupper]
             # Plot Target spectrum vs. Selected response spectra
             fig, ax = plt.subplots(1, 1, figsize=(8, 8))
             for i in range(self.rec_spec.shape[0]):
                 ax.plot(self.T, self.rec_spec[i, :] * self.rec_scale, color='gray', lw=1, label='Selected')
             ax.plot(self.T, np.mean(self.rec_spec, axis=0) * self.rec_scale, color='black', lw=2, label='Selected Mean')
-            ax.plot(self.T, self.target, color='red', lw=2, label='Target')
+
+            if self.code == 'TBEC 2018':
+                ax.plot(self.T, self.target, color='red', lw=2, label='Design Response Spectrum')
+                if self.selection == 2:
+                    ax.plot(self.T, 1.3 * self.target, color='red', ls='--', lw=2,
+                            label='1.3 x Design Response Spectrum')
+
+            if self.code == 'ASCE 7-16':
+                ax.plot(self.T, self.target, color='red', lw=2, label='$MCE_{R}$ Response Spectrum')
+                ax.plot(self.T, 0.9 * self.target, color='red', ls='--', lw=2,
+                        label='0.9 x $MCE_{R}$ Response Spectrum')
+
+            if self.code == 'EC8-Part1':
+                ax.plot(self.T, self.target, color='red', lw=2, label='Design Response Spectrum')
+                ax.plot(self.T, 0.9 * self.target, color='red', lw=2, ls='--', label='0.9 x Design Response Spectrum')
+
             ax.axvspan(hatch[0], hatch[1], facecolor='red', alpha=0.3)
             ax.set_xlabel('Period [sec]')
             ax.set_ylabel('Spectral Acceleration [g]')
@@ -534,8 +574,8 @@ class utility:
             handles, labels = ax.get_legend_handles_labels()
             by_label = dict(zip(labels, handles))
             ax.legend(by_label.values(), by_label.keys(), frameon=False)
-            ax.set_xlim([self.T[0], self.Tp * 3])
-            plt.suptitle('Target Spectrum vs. Spectra of Selected Records', y=0.95)
+            ax.set_xlim([self.T[0], self.Tupper * 2])
+            plt.suptitle('Spectra of Selected Records (%s)' % self.code, y=0.95)
 
             if save == 1:
                 plt.savefig(os.path.join(self.outdir, 'Selected.pdf'))
@@ -543,525 +583,6 @@ class utility:
             # Show the figure
             if show == 1:
                 plt.show()
-
-        if type(self).__name__ == 'ec8_part1':
-            hatch = [self.Tp * 0.2, self.Tp * 2.0]
-            # Plot Target spectrum vs. Selected response spectra
-            fig, ax = plt.subplots(1, 1, figsize=(8, 8))
-            if self.selection == 1:
-                for i in range(self.rec_spec.shape[0]):
-                    ax.plot(self.T, self.rec_spec[i, :] * self.rec_scale, color='gray', lw=1, label='Selected')
-                ax.plot(self.T, np.mean(self.rec_spec, axis=0) * self.rec_scale, color='black', lw=2,
-                        label='Selected Mean')
-            if self.selection == 2:
-                for i in range(self.rec_spec1.shape[0]):
-                    ax.plot(self.T, self.rec_spec1[i, :] * self.rec_scale, color='gray', lw=1, label='Selected')
-                    ax.plot(self.T, self.rec_spec2[i, :] * self.rec_scale, color='gray', lw=1, label='Selected')
-                ax.plot(self.T, np.mean((self.rec_spec1 + self.rec_spec2) / 2, axis=0) * self.rec_scale, color='black',
-                        lw=2, label='Selected Mean')
-            ax.plot(self.T, self.design_spectrum, color='blue', lw=2, label='Design Spectrum')
-            ax.plot(self.T, 0.9 * self.design_spectrum, color='blue', lw=2, ls='--', label='0.9 x Design Spectrum')
-            ax.axvspan(hatch[0], hatch[1], facecolor='red', alpha=0.3)
-            ax.set_xlabel('Period [sec]')
-            ax.set_ylabel('Spectral Acceleration [g]')
-            ax.grid(True)
-            handles, labels = ax.get_legend_handles_labels()
-            by_label = dict(zip(labels, handles))
-            ax.legend(by_label.values(), by_label.keys(), frameon=False)
-            ax.set_xlim([self.T[0], self.Tp * 3])
-            plt.suptitle('Target Spectrum vs. Spectra of Selected Records', y=0.95)
-
-            if save == 1:
-                plt.savefig(os.path.join(self.outdir, 'Selected.pdf'))
-
-            # Show the figure
-            if show == 1:
-                plt.show()
-
-    #############################################################################################
-    ##### Methods used to read and write ground motion record files, and create folders etc #####
-    #############################################################################################
-
-    @staticmethod
-    def create_dir(dir_path):
-        """
-        Details
-        -------
-        Creates a clean directory by deleting it if it exists.
-
-        Parameters
-        ----------
-        dir_path : str
-            name of directory to create.
-
-        None.
-        """
-
-        def handleRemoveReadonly(func, path, exc):
-            excvalue = exc[1]
-            if func in (os.rmdir, os.remove) and excvalue.errno == errno.EACCES:
-                os.chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)  # 0777
-                func(path)
-            else:
-                raise Warning("Path is being used by at the moment.",
-                              "It cannot be recreated.")
-
-        if os.path.exists(dir_path):
-            shutil.rmtree(dir_path, ignore_errors=False, onerror=handleRemoveReadonly)
-        os.makedirs(dir_path)
-
-    @staticmethod
-    def ContentFromZip(paths, zipName):
-        """
-        Details
-        -------
-        This function reads the contents of all selected records
-        from the zipfile in which the records are located
-
-        Parameters
-        ----------
-        paths : list
-            Containing file list which are going to be read from the zipfile.
-        zipName    : str
-            Path to the zip file where file lists defined in "paths" are located.
-
-        Returns
-        -------
-        contents   : dictionary
-            Containing raw contents of the files which are read from the zipfile.
-        """
-
-        contents = {}
-        with zipfile.ZipFile(zipName, 'r') as myzip:
-            for i in range(len(paths)):
-                with myzip.open(paths[i]) as myfile:
-                    contents[i] = [x.decode('utf-8') for x in myfile.readlines()]
-
-        return contents
-
-    @staticmethod
-    def ReadNGA(inFilename=None, content=None, outFilename=None):
-        """
-        Details
-        -------
-        This function process acceleration history for NGA data file (.AT2 format).
-
-        Parameters
-        ----------
-        inFilename : str, optional
-            Location and name of the input file.
-            The default is None
-        content    : str, optional
-            Raw content of the .AT2 file.
-            The default is None
-        outFilename : str, optional
-            location and name of the output file.
-            The default is None.
-
-        Notes
-        -----
-        At least one of the two variables must be defined: inFilename, content.
-
-        Returns
-        -------
-        dt   : float
-            time interval of recorded points.
-        npts : int
-            number of points in ground motion record file.
-        desc : str
-            Description of the earthquake (e.g., name, year, etc).
-        t    : numpy.array (n x 1)
-            time array, same length with npts.
-        acc  : numpy.array (n x 1)
-            acceleration array, same length with time unit
-            usually in (g) unless stated as other.
-        """
-
-        try:
-            # Read the file content from inFilename
-            if content is None:
-                with open(inFilename, 'r') as inFileID:
-                    content = inFileID.readlines()
-
-            # check the first line
-            temp = str(content[0]).split()
-            try:  # description is in the end
-                float(temp[0])
-                flag = 1
-            except:  # description is in the beginning
-                flag = 0
-
-            counter = 0
-            desc, row4Val, acc_data = "", "", []
-
-            if flag == 1:
-                for x in content:
-                    if counter == len(content) - 3:
-                        desc = x
-                    elif counter == len(content) - 1:
-                        row4Val = x
-                        if row4Val[0][0] == 'N':
-                            val = row4Val.split()
-                            npts = float(val[(val.index('NPTS=')) + 1].rstrip(','))
-                            try:
-                                dt = float(val[(val.index('DT=')) + 1])
-                            except:
-                                dt = float(val[(val.index('DT=')) + 1].replace('SEC,', ''))
-                        else:
-                            val = row4Val.split()
-                            npts = float(val[0])
-                            dt = float(val[1])
-
-                    elif counter < len(content) - 4:
-                        data = str(x).split()
-                        for value in data:
-                            a = float(value)
-                            acc_data.append(a)
-                        acc = np.asarray(acc_data)
-                    counter = counter + 1
-
-            if flag == 0:
-                for x in content:
-                    if counter == 1:
-                        desc = x
-                    elif counter == 3:
-                        row4Val = x
-                        if row4Val[0][0] == 'N':
-                            val = row4Val.split()
-                            npts = float(val[(val.index('NPTS=')) + 1].rstrip(','))
-                            try:
-                                dt = float(val[(val.index('DT=')) + 1])
-                            except:
-                                dt = float(val[(val.index('DT=')) + 1].replace('SEC,', ''))
-                        else:
-                            val = row4Val.split()
-                            npts = float(val[0])
-                            dt = float(val[1])
-
-                    elif counter > 3:
-                        data = str(x).split()
-                        for value in data:
-                            a = float(value)
-                            acc_data.append(a)
-                        acc = np.asarray(acc_data)
-                    counter = counter + 1
-
-            t = []  # save time history
-            for i in range(0, len(acc_data)):
-                ti = i * dt
-                t.append(ti)
-
-            if outFilename is not None:
-                np.savetxt(outFilename, acc, fmt='%1.4e')
-
-            npts = int(npts)
-            return dt, npts, desc, t, acc
-
-        except:
-            print("processMotion FAILED!: The record file is not in the directory")
-            print(inFilename)
-
-    @staticmethod
-    def ReadESM(inFilename=None, content=None, outFilename=None):
-        """
-        Details
-        -------
-        This function process acceleration history for ESM data file.
-
-        Parameters
-        ----------
-        inFilename : str, optional
-            Location and name of the input file.
-            The default is None
-        content    : str, optional
-            Raw content of the exsim record file.
-            The default is None
-        outFilename : str, optional
-            location and name of the output file.
-            The default is None.
-
-        Returns
-        -------
-        dt   : float
-            time interval of recorded points.
-        npts : int
-            number of points in ground motion record file.
-        desc : str
-            Description of the earthquake (e.g., name, year, etc).
-        time : numpy.array (n x 1)
-            time array, same length with npts.
-        acc  : numpy.array (n x 1)
-            acceleration array, same length with time unit
-            usually in (g) unless stated as other.
-        """
-
-        try:
-            # Read the file content from inFilename
-            if content is None:
-                with open(inFilename, 'r') as inFileID:
-                    content = inFileID.readlines()
-
-            desc = content[:64]
-            dt = float(difflib.get_close_matches('SAMPLING_INTERVAL_S', content)[0].split()[1])
-            npts = len(content[64:])
-            acc = []
-
-            for i in range(64, len(content)):
-                acc.append(float(content[i]))
-
-            acc = np.asarray(acc)
-            dur = len(acc) * dt
-            t = np.arange(0, dur, dt)
-            acc = acc / 980.655  # cm/s**2 to g
-
-            if outFilename is not None:
-                np.savetxt(outFilename, acc, fmt='%1.4e')
-
-            return dt, npts, desc, t, acc
-
-        except:
-            print("processMotion FAILED!: The record file is not in the directory")
-            print(inFilename)
-
-    @staticmethod
-    def ReadEXSIM(inFilename=None, content=None, outFilename=None):
-        """
-        Details
-        -------
-        This function process acceleration history for EXSIM data file.
-
-        Parameters
-        ----------
-        inFilename : str, optional
-            Location and name of the input file.
-            The default is None
-        content    : str, optional
-            Raw content of the exsim record file.
-            The default is None
-        outFilename : str, optional
-            location and name of the output file.
-            The default is None.
-
-        Returns
-        -------
-        dt   : float
-            time interval of recorded points.
-        npts : int
-            number of points in ground motion record file.
-        desc : str
-            Description of the earthquake (e.g., name, year, etc).
-        time : numpy.array (n x 1)
-            time array, same length with npts.
-        acc  : numpy.array (n x 1)
-            acceleration array, same length with time unit
-            usually in (g) unless stated as other.
-        """
-
-        try:
-            # Read the file content from inFilename
-            if content is None:
-                with open(inFilename, 'r') as inFileID:
-                    content = inFileID.readlines()
-
-            desc = content[:12]
-            dt = float(content[6].split()[1])
-            npts = int(content[5].split()[0])
-            acc = []
-
-            for i in range(12, len(content)):
-                temp = content[i].split()
-                acc.append(float(temp[1]))
-
-            acc = np.asarray(acc)
-            if len(acc) < 20000:
-                acc = acc[2500:10800]  # get rid of zeros
-            dur = len(acc) * dt
-            t = np.arange(0, dur, dt)
-            acc = acc / 980.655  # cm/s**2 to g
-
-            if outFilename is not None:
-                np.savetxt(outFilename, acc, fmt='%1.4e')
-
-            return dt, npts, desc, t, acc
-
-        except:
-            print("processMotion FAILED!: The record file is not in the directory")
-            print(inFilename)
-
-    def write(self, obj=0, recs=1, recs_f=''):
-        """
-        Details
-        -------
-        Writes the cs_master object, selected and scaled records.
-
-        Parameters
-        ----------
-        obj : int, optional
-            flag to write the object into the pickle file. The default is 0.
-        recs : int, optional
-            flag to write the selected and scaled time histories.
-            The default is 1.
-        recs_f : str, optional
-            This is option could be used if the user already has all the
-            records in database. This is the folder path which contains
-            "database.zip" file. The records must be placed inside
-            recs_f/database.zip/database/
-            The default is ''.
-
-        Notes
-        -----
-        0: no, 1: yes
-
-        Returns
-        -------
-        None.
-        """
-
-        if recs == 1:
-            # set the directories and file names
-            try:  # this will work if records are downloaded
-                zipName = self.Unscaled_rec_file
-            except:
-                zipName = os.path.join(recs_f, self.database['Name'] + '.zip')
-            n = len(self.rec_h1)
-            path_dts = os.path.join(self.outdir, 'GMR_dts.txt')
-            dts = np.zeros(n)
-            path_H1 = os.path.join(self.outdir, 'GMR_names.txt')
-            if self.selection == 2:
-                path_H1 = os.path.join(self.outdir, 'GMR_H1_names.txt')
-                path_H2 = os.path.join(self.outdir, 'GMR_H2_names.txt')
-                h2s = open(path_H2, 'w')
-            h1s = open(path_H1, 'w')
-
-            # Get record paths
-            if self.database['Name'].startswith('EXSIM'):  # EXSIM
-                rec_paths1 = [self.database['Name'] + '/' + self.rec_h1[i].split('_acc')[0] + '/'
-                              + self.rec_h1[i] for i in range(n)]
-            else:  # NGA_W2 or ESM
-                if zipName != os.path.join(recs_f, self.database['Name'] + '.zip'):
-                    rec_paths1 = self.rec_h1
-                    if self.selection == 2:
-                        rec_paths2 = self.rec_h2
-                else:
-                    rec_paths1 = [self.database['Name'] + '/' + self.rec_h1[i] for i in range(n)]
-                    if self.selection == 2:
-                        rec_paths2 = [self.database['Name'] + '/' + self.rec_h2[i] for i in range(n)]
-
-            # Read contents from zipfile
-            contents1 = self.ContentFromZip(rec_paths1, zipName)  # H1 gm components
-            if self.selection == 2:
-                contents2 = self.ContentFromZip(rec_paths2, zipName)  # H2 gm components
-
-            # Start saving records
-            for i in range(n):
-                # This is necessary, since scale factor is a single value for code-based selection
-                if type(self.rec_scale) is float:
-                    SF = self.rec_scale
-                else:
-                    SF = self.rec_scale[i]
-
-                # Read the record files
-                if self.database['Name'].startswith('EXSIM'):  # EXSIM
-                    dts[i], _, _, _, inp_acc1 = self.ReadEXSIM(inFilename=self.rec_h1[i], content=contents1[i])
-                    gmr_file1 = self.rec_h1[i][:-4] + '_SF_' + "{:.3f}".format(SF) + '.txt'
-
-                elif self.database['Name'].startswith('NGA'):  # NGA
-                    dts[i], npts1, _, _, inp_acc1 = self.ReadNGA(inFilename=self.rec_h1[i], content=contents1[i])
-                    gmr_file1 = self.rec_h1[i].replace('/', '_')[:-4] + '_SF_' + "{:.3f}".format(SF) + '.txt'
-                    if self.selection == 2:  # H2 component
-                        _, npts2, _, _, inp_acc2 = self.ReadNGA(inFilename=self.rec_h2[i], content=contents2[i])
-                        gmr_file2 = self.rec_h2[i].replace('/', '_')[:-4] + '_SF_' + "{:.3f}".format(SF) + '.txt'
-
-                elif self.database['Name'].startswith('ESM'):  # ESM
-                    dts[i], npts1, _, _, inp_acc1 = self.ReadESM(inFilename=self.rec_h1[i], content=contents1[i])
-                    gmr_file1 = self.rec_h1[i][:-4] + '_SF_' + "{:.3f}".format(SF) + '.txt'
-                    if self.selection == 2:  # H2 component
-                        _, npts2, _, _, inp_acc2 = self.ReadESM(inFilename=self.rec_h2[i], content=contents2[i])
-                        gmr_file2 = self.rec_h2[i][:-4] + '_SF_' + "{:.3f}".format(SF) + '.txt'
-
-                # Write the record files
-                if self.selection == 2: 
-                    # ensure that two acceleration signals have the same length, if not add zeros.
-                    npts = max(npts1,npts2)
-                    temp1 = np.zeros(npts)
-                    temp1[:npts1] = inp_acc1
-                    inp_acc1=temp1.copy()
-                    temp2 = np.zeros(npts)
-                    temp2[:npts2] = inp_acc2
-                    inp_acc2=temp2.copy()
-
-                    # Accelerations for H2 component
-                    path = os.path.join(self.outdir, gmr_file2)
-                    acc_Sc = SF * inp_acc2
-                    np.savetxt(path, acc_Sc, fmt='%1.4e')
-                    h2s.write(gmr_file2 + '\n')
-
-                # Accelerations for H1 component
-                path = os.path.join(self.outdir, gmr_file1)
-                acc_Sc = SF * inp_acc1
-                np.savetxt(path, acc_Sc, fmt='%1.4e')
-                h1s.write(gmr_file1 + '\n')
-            # Time steps
-            np.savetxt(path_dts, dts, fmt='%.5f')
-            h1s.close()
-            if self.selection == 2:
-                h2s.close()
-
-        if obj == 1:
-            # save some info as pickle obj
-            path_obj = os.path.join(self.outdir, 'obj.pkl')
-            obj = vars(copy.deepcopy(self))  # use copy.deepcopy to create independent obj
-            obj['database'] = self.database['Name']
-            del obj['outdir']
-
-            if 'bgmpe' in obj:
-                del obj['bgmpe']
-
-            with open(path_obj, 'wb') as file:
-                pickle.dump(obj, file)
-
-        print('Finished writing process, the files are located in\n%s' % self.outdir)
-
-    #############################################################################################
-    ######### Methods used to to download records from record databases available online ########
-    #############################################################################################
-
-    @staticmethod
-    def get_esm_token(username, pwd):
-        """
-        Details
-        -------
-        This function retrieves ESM database token.
-
-        Notes
-        -------
-        Data must be obtained using any program supporting the HTTP-POST method, e.g. CURL.
-        see: https://esm-db.eu/esmws/generate-signed-message/1/query-options.html
-        Credentials must have been retrieved from https://esm-db.eu/#/home.
-
-        Parameters
-        ----------
-        username     : str
-            Account username (e-mail),  e.g. 'username@mail.com'.
-        pwd          : str
-            Account password, e.g. 'password!12345'.
-
-        Returns
-        -------
-        None.
-        """
-
-        if sys.platform.startswith('win'):
-            command = 'curl --ssl-no-revoke -X POST -F ' + '\"' + \
-                      'message={' + '\\\"' + 'user_email' + '\\\": ' + '\\\"' + username + '\\\", ' + \
-                      '\\\"' + 'user_password' + '\\\": ' + '\\\"' + pwd + '\\\"}' + \
-                      '\" ' + '\"https://esm-db.eu/esmws/generate-signed-message/1/query\" > token.txt'
-        else:
-            command = 'curl -X POST -F \'message={\"user_email\": \"' + \
-                      username + '\",\"user_password\": \"' + pwd + \
-                      '\"}\' \"https://esm-db.eu/esmws/generate-signed-message/1/query\" > token.txt'
-
-        os.system(command)
 
     def esm2018_download(self):
         """
@@ -1432,7 +953,7 @@ class utility:
             raise ValueError('You have to use NGA_W2 database to use ngaw2_download method.')
 
 
-class conditional_spectrum(utility):
+class conditional_spectrum(_subclass_):
     """
     This class is used to
         1) Create target spectrum
@@ -1444,7 +965,7 @@ class conditional_spectrum(utility):
         3) Scaling and processing of selected ground motion records
     """
 
-    def __init__(self, Tstar=0.5, gmpe='BooreEtAl2014', database='NGA_W2', pInfo=1):
+    def __init__(self, database='NGA_W2', outdir='Outputs'):
         # TODO: Combine all metadata into single sql file.
         """
         Details
@@ -1454,14 +975,11 @@ class conditional_spectrum(utility):
         
         Parameters
         ----------
-        Tstar    : int, float, numpy.array, the default is None.
-            Conditioning period or periods in case of AvgSa [sec].
-        gmpe     : str, optional
-            GMPE model (see OpenQuake library). 
-            The default is 'BooreEtAl2014'.
         database : str, optional
-            Database to use: NGA_W2, ESM_2018, EXSIM_Duzce
-            The default is NGA_W2.        
+            Database to use: NGA_W2, ESM_2018
+        The default is NGA_W2.
+            outdir     : str, optional, the default is 'Outputs'.
+            output directory to create.
         pInfo    : int, optional
             Flag to print required input for the gmpe which is going to be used. 
             (0: no, 1:yes)
@@ -1472,54 +990,19 @@ class conditional_spectrum(utility):
         None.
         """
 
-        # add Tstar to self
-        if isinstance(Tstar, int) or isinstance(Tstar, float):
-            self.Tstar = np.array([Tstar])
-        elif isinstance(Tstar, numpy.ndarray):
-            self.Tstar = Tstar
-
         # Add the input the ground motion database to use
         matfile = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Meta_Data', database)
         self.database = loadmat(matfile, squeeze_me=True)
         self.database['Name'] = database
 
-        # check if AvgSa or Sa is used as IM, 
-        # then in case of Sa(T*) add T* and Sa(T*) if not present
-        if not self.Tstar[0] in self.database['Periods'] and len(self.Tstar) == 1:
-            f = interpolate.interp1d(self.database['Periods'], self.database['Sa_1'], axis=1)
-            Sa_int = f(self.Tstar[0])
-            Sa_int.shape = (len(Sa_int), 1)
-            Sa = np.append(self.database['Sa_1'], Sa_int, axis=1)
-            Periods = np.append(self.database['Periods'], self.Tstar[0])
-            self.database['Sa_1'] = Sa[:, np.argsort(Periods)]
-
-            if not database.startswith("EXSIM"):
-                f = interpolate.interp1d(self.database['Periods'], self.database['Sa_2'], axis=1)
-                Sa_int = f(self.Tstar[0])
-                Sa_int.shape = (len(Sa_int), 1)
-                Sa = np.append(self.database['Sa_2'], Sa_int, axis=1)
-                self.database['Sa_2'] = Sa[:, np.argsort(Periods)]
-
-                f = interpolate.interp1d(self.database['Periods'], self.database['Sa_RotD50'], axis=1)
-                Sa_int = f(self.Tstar[0])
-                Sa_int.shape = (len(Sa_int), 1)
-                Sa = np.append(self.database['Sa_RotD50'], Sa_int, axis=1)
-                self.database['Sa_RotD50'] = Sa[:, np.argsort(Periods)]
-
-            self.database['Periods'] = Periods[np.argsort(Periods)]
-
-        try:  # this is smth like self.bgmpe = gsim.boore_2014.BooreEtAl2014()
-            self.bgmpe = gsim.get_available_gsims()[gmpe]()
-            self.gmpe = gmpe
-
-        except:
-            raise KeyError('Not a valid gmpe')
-
-        if pInfo == 1:  # print the selected gmpe info
-            self.check_gmpe_attributes(gmpe)
+        # create the output directory and add the path to self
+        cwd = os.getcwd()
+        outdir_path = os.path.join(cwd, outdir)
+        self.outdir = outdir_path
+        create_dir(self.outdir)
 
     @staticmethod
-    def BakerJayaramCorrelationModel(T1, T2, orth=0):
+    def _BakerJayaramCorrelationModel(T1, T2):
         """
         Details
         -------
@@ -1536,8 +1019,6 @@ class conditional_spectrum(utility):
             First period
         T2: float
             Second period
-        orth: int, default is 0
-            1 if the correlation coefficient is computed for the two orthogonal components
     
         Returns
         -------
@@ -1571,13 +1052,10 @@ class conditional_spectrum(utility):
         else:
             rho = c4
 
-        if orth:
-            rho = rho * (0.79 - 0.023 * np.log(np.sqrt(t_min * t_max)))
-
         return rho
 
     @staticmethod
-    def AkkarCorrelationModel(T1, T2):
+    def _AkkarCorrelationModel(T1, T2):
         """
         Details
         -------
@@ -1606,6 +1084,71 @@ class conditional_spectrum(utility):
                             0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.1, 1.2, 1.3, 1.4, 1.5,
                             1.6, 1.7, 1.8, 1.9, 2, 2.2, 2.4, 2.6, 2.8, 3, 3.2, 3.4, 3.6, 3.8, 4])
 
+        coeff_table = np.fromstring("""
+        1.000000000 0.998459319 0.992959119 0.982544599 0.968049306 0.935891712 0.935340260 0.932144334 0.931751872 0.926430615 0.923321139 0.918888775 0.917030483 0.911639361 0.907129682 0.902402109 0.896946675 0.888773486 0.877134367 0.860750213 0.845001970 0.831329156 0.819119695 0.807827754 0.796605604 0.786554638 0.774125984 0.763692083 0.754128870 0.744273823 0.734216226 0.721137528 0.698803347 0.670189828 0.648595259 0.632936382 0.616540526 0.600130851 0.586637070 0.570441490 0.556540670 0.541626641 0.528993811 0.518067400 0.494511874 0.476965753 0.467681175 0.459943411 0.467091314 0.466125719 0.465891941 0.460384183 0.447657660 0.441378795 0.419929380 0.402770275 0.409048639 0.407614656 0.396021594 0.388023676 0.374414280 0.327591227
+        0.998459319 1.000000000 0.996082278 0.986394923 0.972268175 0.937204379 0.933767512 0.929590027 0.928836303 0.923372977 0.920334784 0.915475852 0.912990886 0.906737398 0.901559172 0.896179331 0.890297784 0.881662523 0.869699785 0.852589636 0.836312297 0.822782849 0.810458847 0.799463856 0.788538167 0.778435229 0.765844047 0.755309136 0.745418032 0.735529894 0.725528527 0.712604437 0.691230242 0.663650097 0.642851442 0.627911218 0.612094672 0.596170832 0.582828669 0.566721300 0.553020290 0.538275353 0.525393138 0.515402026 0.491995546 0.474471605 0.465274680 0.457684886 0.465508019 0.464989384 0.464672388 0.458927370 0.445960781 0.440101928 0.418578711 0.401214002 0.407688681 0.405891106 0.394456219 0.387127235 0.374517227 0.327475695
+        0.992959119 0.996082278 1.000000000 0.992649681 0.980086257 0.941197598 0.932602717 0.926505266 0.924007674 0.917523889 0.913586346 0.907977885 0.904686047 0.896912271 0.890031983 0.883376006 0.875689545 0.864581272 0.850486709 0.831422657 0.814069837 0.799595438 0.786465899 0.775232085 0.764169780 0.753866668 0.741140232 0.730545470 0.720452785 0.710961627 0.701394512 0.688744127 0.668279624 0.641661255 0.621614187 0.607454047 0.592405222 0.577170682 0.563905922 0.547714590 0.534528870 0.520236877 0.507911645 0.499247836 0.476489272 0.459554239 0.450632108 0.443887177 0.453676323 0.454063440 0.454152128 0.447873723 0.434358458 0.428919977 0.407199580 0.389843410 0.397056695 0.395959027 0.384472121 0.379463066 0.366941903 0.319627396
+        0.982544599 0.986394923 0.992649681 1.000000000 0.991868613 0.950464336 0.931563247 0.922118516 0.917281952 0.908226354 0.901735251 0.894372183 0.888666445 0.878296160 0.869775534 0.862499538 0.854123051 0.840604566 0.824033973 0.802856644 0.783631523 0.767268157 0.753425444 0.742402848 0.730649645 0.719527880 0.707013849 0.696663368 0.686897701 0.677316536 0.668071521 0.655568121 0.635949994 0.610222984 0.590334250 0.576468647 0.561786372 0.545516568 0.532012677 0.516083694 0.504048834 0.490431526 0.479238029 0.474326737 0.451941391 0.436068643 0.429005528 0.423980829 0.437159862 0.439031229 0.439119060 0.432376218 0.417956810 0.412327683 0.390718170 0.373967595 0.381848592 0.382643147 0.371369841 0.368779338 0.357389576 0.309845437
+        0.968049306 0.972268175 0.980086257 0.991868613 1.000000000 0.962264296 0.934853114 0.922355940 0.914208237 0.902171642 0.892493486 0.883087807 0.874993779 0.862778465 0.852803082 0.843630234 0.833315659 0.816144288 0.797090103 0.773647699 0.752093427 0.734182280 0.719758912 0.708530778 0.695805176 0.683868700 0.670988645 0.660532586 0.651228551 0.641719672 0.632237674 0.619768824 0.600363810 0.575458810 0.554978237 0.540885496 0.526141485 0.509086783 0.495417398 0.480078437 0.469347369 0.456101348 0.445579100 0.441320331 0.420154846 0.404865399 0.400049713 0.395769563 0.410990864 0.414447111 0.414626756 0.407621549 0.392294122 0.385783148 0.364703220 0.348892179 0.357830909 0.361144444 0.347895826 0.346769536 0.335928741 0.287061335
+        0.935891712 0.937204379 0.941197598 0.950464336 0.962264296 1.000000000 0.962615197 0.946983083 0.932736048 0.916504479 0.900697611 0.888448780 0.877582842 0.864031331 0.850833987 0.837208610 0.823523241 0.800934568 0.777560336 0.751236470 0.725236033 0.703276899 0.686195477 0.673138508 0.657750742 0.642103499 0.626024605 0.611941667 0.600548216 0.588997705 0.577499384 0.563139923 0.537065551 0.506654407 0.484245782 0.469499474 0.453353691 0.436416368 0.421481671 0.405428093 0.393791269 0.380915465 0.371943130 0.368567710 0.347857881 0.330967414 0.323162605 0.321046152 0.333837862 0.336077484 0.335971173 0.329302063 0.315903531 0.312372640 0.292619233 0.280248030 0.290766108 0.306970917 0.299373684 0.297351745 0.290186844 0.244808717
+        0.935340260 0.933767512 0.932602717 0.931563247 0.934853114 0.962615197 1.000000000 0.990116513 0.975788829 0.961626511 0.947901807 0.936198102 0.923631053 0.907921861 0.892327730 0.877831671 0.863571118 0.838276836 0.812031528 0.781002635 0.752320254 0.729561627 0.710692090 0.694875287 0.678554053 0.664029001 0.647212006 0.631109273 0.617157180 0.602721669 0.588311292 0.572201368 0.542964437 0.509879102 0.485605758 0.468426247 0.451981143 0.435643477 0.421173623 0.404768931 0.391713589 0.378805455 0.371762114 0.364754462 0.342586661 0.326163442 0.317761408 0.313455213 0.322883212 0.326897555 0.326786547 0.320791399 0.306947067 0.305667553 0.287341638 0.275970914 0.286063278 0.300263857 0.293958754 0.290136746 0.282338477 0.246124740
+        0.932144334 0.929590027 0.926505266 0.922118516 0.922355940 0.946983083 0.990116513 1.000000000 0.989689204 0.975580866 0.961221799 0.948766314 0.935866119 0.920979743 0.905594068 0.890796992 0.875864129 0.848031444 0.820169896 0.788388068 0.760461637 0.737174069 0.718138704 0.702866619 0.685968272 0.671563802 0.654484046 0.637750236 0.624565342 0.610451743 0.595774089 0.579109592 0.546793309 0.510790181 0.486449733 0.468315941 0.450400928 0.433411425 0.418927736 0.402123223 0.388393163 0.374883426 0.368103453 0.357924339 0.335222120 0.318370632 0.309724837 0.305682446 0.313064776 0.316347853 0.316156760 0.310549151 0.297864416 0.298356521 0.281200152 0.271399645 0.283219496 0.293617699 0.287088479 0.283841030 0.277461634 0.243767437
+        0.931751872 0.928836303 0.924007674 0.917281952 0.914208237 0.932736048 0.975788829 0.989689204 1.000000000 0.990692102 0.976279079 0.963261390 0.949927381 0.935380214 0.920197544 0.905478473 0.889847615 0.860228360 0.832742946 0.801648000 0.774197968 0.750437814 0.730425623 0.713926358 0.695476994 0.679925434 0.662604323 0.645538715 0.632107890 0.617992508 0.603504205 0.586348664 0.554477063 0.518415584 0.492098090 0.474119641 0.455368512 0.437661685 0.423477464 0.406548167 0.391564950 0.377626453 0.369422885 0.356726995 0.333375827 0.316061615 0.307808198 0.303464717 0.309172957 0.313023066 0.313680039 0.308066980 0.295076975 0.295461037 0.278371488 0.268622071 0.282411518 0.290206583 0.285660879 0.282668509 0.276289052 0.246189710
+        0.926430615 0.923372977 0.917523889 0.908226354 0.902171642 0.916504479 0.961626511 0.975580866 0.990692102 1.000000000 0.990603920 0.977076607 0.963343377 0.948772358 0.933778755 0.918866639 0.902998893 0.872080552 0.843009308 0.810775785 0.781796847 0.757163377 0.736115563 0.717277070 0.697503117 0.681458848 0.663781344 0.646399290 0.632348726 0.618139584 0.603625471 0.586337604 0.555585542 0.520652476 0.493648277 0.474623746 0.455144819 0.437389777 0.424032826 0.407091063 0.392164268 0.377080765 0.367321133 0.353822231 0.330522280 0.312790035 0.305808990 0.301518184 0.305559435 0.310789045 0.311188137 0.306296417 0.295131464 0.295872886 0.278990978 0.267324448 0.282158234 0.292110467 0.289709619 0.286648955 0.279832113 0.251575366
+        0.923321139 0.920334784 0.913586346 0.901735251 0.892493486 0.900697611 0.947901807 0.961221799 0.976279079 0.990603920 1.000000000 0.991234852 0.977263347 0.962050918 0.947410572 0.932539689 0.916532455 0.886035092 0.856693255 0.824512878 0.795275895 0.771099389 0.749696094 0.730131944 0.710191567 0.693831629 0.675757722 0.657705784 0.642968742 0.627951273 0.613110783 0.595944989 0.564526872 0.529205600 0.501994765 0.483210664 0.463201523 0.445657936 0.432123543 0.414445146 0.398937719 0.383427624 0.372218848 0.355890544 0.332325762 0.313675494 0.307423499 0.301935949 0.303933831 0.309031533 0.309192298 0.304332821 0.293449546 0.293011088 0.274593213 0.262019434 0.278051027 0.288451408 0.286332638 0.282976017 0.276909997 0.249258668
+        0.918888775 0.915475852 0.907977885 0.894372183 0.883087807 0.888448780 0.936198102 0.948766314 0.963261390 0.977076607 0.991234852 1.000000000 0.991461875 0.977249387 0.962684428 0.948288687 0.932397769 0.902401297 0.873944904 0.843125168 0.813827100 0.789043206 0.766759290 0.746920939 0.727166482 0.710549016 0.691277639 0.671783979 0.656435586 0.641231214 0.626363300 0.609761022 0.577624812 0.541308857 0.513780642 0.495161104 0.474055020 0.456058811 0.441204827 0.422575253 0.405919014 0.389474729 0.375384279 0.357490128 0.332760862 0.313967306 0.309698716 0.302466457 0.302581884 0.306199900 0.305430485 0.300673821 0.290090051 0.286175681 0.266462404 0.253842515 0.268766903 0.277634726 0.274937010 0.271795167 0.265717553 0.239620288
+        0.917030483 0.912990886 0.904686047 0.888666445 0.874993779 0.877582842 0.923631053 0.935866119 0.949927381 0.963343377 0.977263347 0.991461875 1.000000000 0.991878466 0.978090238 0.964094767 0.948920678 0.919713105 0.891089102 0.861176855 0.833550120 0.809178023 0.786747467 0.766899229 0.747966585 0.731413777 0.712126250 0.692921732 0.677778238 0.662436373 0.647637045 0.631107390 0.597819630 0.561148767 0.533010875 0.513356262 0.491251279 0.472668535 0.457987065 0.439130079 0.422142181 0.405149095 0.390700404 0.371814153 0.346475259 0.327027891 0.321883357 0.314095902 0.312982403 0.315845362 0.313717071 0.309522978 0.299951916 0.294943875 0.275501618 0.262448020 0.276276401 0.281420646 0.279922024 0.276053857 0.270090412 0.245635104
+        0.911639361 0.906737398 0.896912271 0.878296160 0.862778465 0.864031331 0.907921861 0.920979743 0.935380214 0.948772358 0.962050918 0.977249387 0.991878466 1.000000000 0.992580846 0.979232390 0.964160461 0.935228508 0.906816850 0.878590479 0.852353167 0.827736074 0.805368248 0.785788107 0.767419299 0.751070583 0.732484692 0.713720892 0.698680156 0.683301523 0.668330341 0.651886869 0.617640927 0.580147557 0.552081622 0.531657547 0.507920297 0.488383415 0.472946962 0.453366508 0.436991418 0.419899796 0.404944759 0.385413845 0.360995737 0.341744537 0.334913853 0.326304502 0.323121214 0.325465647 0.323318314 0.319365187 0.310962838 0.306165169 0.287931470 0.274861110 0.288000123 0.294133111 0.292219131 0.287580691 0.280332211 0.255837514
+        0.907129682 0.901559172 0.890031983 0.869775534 0.852803082 0.850833987 0.892327730 0.905594068 0.920197544 0.933778755 0.947410572 0.962684428 0.978090238 0.992580846 1.000000000 0.992392183 0.978861488 0.950315509 0.922825230 0.896620663 0.871711984 0.847817658 0.825830210 0.805999642 0.788128435 0.771518085 0.753500199 0.735242143 0.720374704 0.704624017 0.689728673 0.673641884 0.638863972 0.600435509 0.571959727 0.550977150 0.526602351 0.506006960 0.490156485 0.470058406 0.454634719 0.437505595 0.421968892 0.400600713 0.375894609 0.356111071 0.347073209 0.337578577 0.333131292 0.334086897 0.332882535 0.329531653 0.322391412 0.317042426 0.300098589 0.286926765 0.302118806 0.306425395 0.305054461 0.299876324 0.290794284 0.264918559
+        0.902402109 0.896179331 0.883376006 0.862499538 0.843630234 0.837208610 0.877831671 0.890796992 0.905478473 0.918866639 0.932539689 0.948288687 0.964094767 0.979232390 0.992392183 1.000000000 0.992919392 0.965554280 0.937751155 0.912374316 0.889244215 0.865558453 0.843304535 0.822777811 0.805076491 0.789310781 0.771800064 0.753686174 0.739043451 0.722863867 0.707648072 0.691643410 0.657405998 0.619981357 0.590898312 0.570314641 0.545948008 0.524637823 0.508238513 0.488292909 0.472911017 0.455759977 0.439640108 0.416870141 0.390834026 0.370873976 0.361475680 0.351910460 0.347919156 0.347781531 0.347503075 0.344891466 0.337223378 0.329883434 0.312553164 0.298647778 0.315799115 0.316085084 0.313419871 0.308003502 0.297064428 0.271319428
+        0.896946675 0.890297784 0.875689545 0.854123051 0.833315659 0.823523241 0.863571118 0.875864129 0.889847615 0.902998893 0.916532455 0.932397769 0.948920678 0.964160461 0.978861488 0.992919392 1.000000000 0.981526197 0.953935871 0.928608956 0.906378431 0.882858511 0.860361416 0.839579829 0.822247992 0.806750736 0.789389481 0.771138927 0.756374021 0.740260214 0.724966726 0.709026958 0.674134702 0.637174840 0.607599704 0.586767148 0.562652094 0.540713747 0.523841189 0.504457115 0.489175229 0.472345733 0.455559793 0.431793892 0.404815844 0.383968164 0.373417718 0.362866364 0.358636506 0.357603963 0.356952598 0.354545886 0.346082342 0.337175955 0.318916422 0.304391592 0.321091927 0.318255597 0.315234055 0.308869052 0.296407372 0.267233297
+        0.888773486 0.881662523 0.864581272 0.840604566 0.816144288 0.800934568 0.838276836 0.848031444 0.860228360 0.872080552 0.886035092 0.902401297 0.919713105 0.935228508 0.950315509 0.965554280 0.981526197 1.000000000 0.983188132 0.959078850 0.937509858 0.914343183 0.893018761 0.873570904 0.857413372 0.841800847 0.823681570 0.805410987 0.789930483 0.773231093 0.757567039 0.742559390 0.708014570 0.671646264 0.642542342 0.622684252 0.599796782 0.577728753 0.562207880 0.544157126 0.527351829 0.510342804 0.493508756 0.467832893 0.439714609 0.418897169 0.406342268 0.393734228 0.387257753 0.385395888 0.384024849 0.381568435 0.371714812 0.359793112 0.338666531 0.321962039 0.337149268 0.331189588 0.327291574 0.317595706 0.299746833 0.264459231
+        0.877134367 0.869699785 0.850486709 0.824033973 0.797090103 0.777560336 0.812031528 0.820169896 0.832742946 0.843009308 0.856693255 0.873944904 0.891089102 0.906816850 0.922825230 0.937751155 0.953935871 0.983188132 1.000000000 0.985080494 0.963602517 0.941486205 0.921278855 0.902148604 0.886447380 0.870474302 0.852466430 0.834969148 0.819602813 0.803049263 0.788046832 0.773774047 0.738699435 0.703518087 0.673287574 0.652934282 0.631539980 0.610301027 0.594634258 0.576942969 0.559225210 0.541523783 0.520310447 0.492785876 0.464495956 0.443024302 0.429168012 0.416706147 0.409062703 0.405902074 0.404829344 0.401684269 0.390242030 0.377716151 0.355556786 0.338060659 0.351054868 0.343741052 0.337998036 0.327063915 0.309826727 0.276507212
+        0.860750213 0.852589636 0.831422657 0.802856644 0.773647699 0.751236470 0.781002635 0.788388068 0.801648000 0.810775785 0.824512878 0.843125168 0.861176855 0.878590479 0.896620663 0.912374316 0.928608956 0.959078850 0.985080494 1.000000000 0.987076214 0.966251550 0.946367672 0.927192867 0.911111755 0.895184724 0.878182524 0.861043012 0.845272097 0.828166207 0.812508502 0.797578221 0.763621195 0.728218280 0.697059999 0.675306078 0.653618636 0.632259339 0.616606764 0.598515398 0.579387213 0.561003780 0.536573129 0.506393869 0.478261417 0.456448470 0.443626467 0.431722335 0.423844795 0.419800364 0.418384709 0.414824131 0.405052153 0.392564773 0.371408735 0.354258036 0.364224754 0.354811270 0.349292709 0.338303391 0.321379107 0.286839305
+        0.845001970 0.836312297 0.814069837 0.783631523 0.752093427 0.725236033 0.752320254 0.760461637 0.774197968 0.781796847 0.795275895 0.813827100 0.833550120 0.852353167 0.871711984 0.889244215 0.906378431 0.937509858 0.963602517 0.987076214 1.000000000 0.987765466 0.968682433 0.949866317 0.934015674 0.917973989 0.901245207 0.883761969 0.867553991 0.849570378 0.833425822 0.818373340 0.785161324 0.750268840 0.719150115 0.697607895 0.675987578 0.654132757 0.638293914 0.620318278 0.600279507 0.581596469 0.556366577 0.524838746 0.495871759 0.474379462 0.461080448 0.449401990 0.441288735 0.435855549 0.433573677 0.429647421 0.419633298 0.408018661 0.386465311 0.368352442 0.376066786 0.362685030 0.355378232 0.343260457 0.325705273 0.290190152
+        0.831329156 0.822782849 0.799595438 0.767268157 0.734182280 0.703276899 0.729561627 0.737174069 0.750437814 0.757163377 0.771099389 0.789043206 0.809178023 0.827736074 0.847817658 0.865558453 0.882858511 0.914343183 0.941486205 0.966251550 0.987765466 1.000000000 0.989282518 0.971720671 0.955831640 0.939380610 0.922432333 0.905063844 0.888609307 0.870698403 0.855015340 0.840698575 0.807476852 0.772566613 0.741638159 0.721218078 0.699089479 0.676804998 0.661404125 0.644427961 0.625063502 0.607281741 0.581131788 0.547731229 0.519871077 0.498788919 0.484955629 0.473600121 0.466111433 0.460100699 0.457359995 0.453103576 0.442158187 0.431052969 0.409003716 0.390815816 0.400032678 0.384069571 0.376313732 0.364472634 0.345928556 0.306793984
+        0.819119695 0.810458847 0.786465899 0.753425444 0.719758912 0.686195477 0.710692090 0.718138704 0.730425623 0.736115563 0.749696094 0.766759290 0.786747467 0.805368248 0.825830210 0.843304535 0.860361416 0.893018761 0.921278855 0.946367672 0.968682433 0.989282518 1.000000000 0.990629419 0.974968587 0.958407552 0.941853460 0.925378025 0.909698324 0.892671841 0.877214810 0.862767082 0.829433708 0.793831747 0.762869579 0.741160415 0.718422078 0.696553647 0.682235979 0.665373624 0.646403599 0.629783687 0.602463002 0.567565408 0.539635481 0.518485506 0.503506571 0.491449857 0.483229527 0.477268008 0.474731561 0.470019281 0.457572144 0.447043980 0.424053991 0.405330662 0.413916872 0.395008131 0.385989904 0.373069949 0.353855693 0.313364781
+        0.807827754 0.799463856 0.775232085 0.742402848 0.708530778 0.673138508 0.694875287 0.702866619 0.713926358 0.717277070 0.730131944 0.746920939 0.766899229 0.785788107 0.805999642 0.822777811 0.839579829 0.873570904 0.902148604 0.927192867 0.949866317 0.971720671 0.990629419 1.000000000 0.991282675 0.975928093 0.959847321 0.944296101 0.928890910 0.912357429 0.896957753 0.882018410 0.848157370 0.811757887 0.781082395 0.759724730 0.737819383 0.715817133 0.700585483 0.683203100 0.664038261 0.648323052 0.620371924 0.584327139 0.556168042 0.535213259 0.519933278 0.507589302 0.498505417 0.491561153 0.488620707 0.483146893 0.470172841 0.460470291 0.436623890 0.417916853 0.425563532 0.406239072 0.396941043 0.383166929 0.363913564 0.322319411
+        0.796605604 0.788538167 0.764169780 0.730649645 0.695805176 0.657750742 0.678554053 0.685968272 0.695476994 0.697503117 0.710191567 0.727166482 0.747966585 0.767419299 0.788128435 0.805076491 0.822247992 0.857413372 0.886447380 0.911111755 0.934015674 0.955831640 0.974968587 0.991282675 1.000000000 0.992231729 0.977895397 0.962872808 0.947813449 0.931756306 0.916463866 0.901675012 0.867264671 0.831044135 0.801167763 0.780863356 0.759567978 0.737886670 0.722133559 0.705172595 0.686196619 0.669768852 0.641667578 0.606345410 0.578838233 0.557998057 0.541884883 0.528614796 0.518232765 0.510171160 0.505388571 0.498916704 0.486192237 0.477849233 0.454711228 0.435764958 0.440615871 0.421772989 0.412532101 0.397753600 0.376298229 0.334237875
+        0.786554638 0.778435229 0.753866668 0.719527880 0.683868700 0.642103499 0.664029001 0.671563802 0.679925434 0.681458848 0.693831629 0.710549016 0.731413777 0.751070583 0.771518085 0.789310781 0.806750736 0.841800847 0.870474302 0.895184724 0.917973989 0.939380610 0.958407552 0.975928093 0.992231729 1.000000000 0.992886390 0.979229414 0.965013670 0.949508507 0.934415360 0.920269764 0.886803709 0.851776068 0.822415252 0.801817269 0.780666343 0.759635640 0.743702403 0.726734948 0.707464283 0.690327886 0.661915271 0.626890816 0.599082332 0.577875045 0.560794732 0.547203765 0.535994440 0.526901124 0.522052463 0.515492441 0.501977186 0.492295849 0.469513920 0.450580072 0.454558823 0.433855649 0.423004536 0.408583246 0.385674105 0.343985400
+        0.774125984 0.765844047 0.741140232 0.707013849 0.670988645 0.626024605 0.647212006 0.654484046 0.662604323 0.663781344 0.675757722 0.691277639 0.712126250 0.732484692 0.753500199 0.771800064 0.789389481 0.823681570 0.852466430 0.878182524 0.901245207 0.922432333 0.941853460 0.959847321 0.977895397 0.992886390 1.000000000 0.992808304 0.980090092 0.965331640 0.950869846 0.937118859 0.904898169 0.871028107 0.842076036 0.820933796 0.799359151 0.777955636 0.761134676 0.743106649 0.723754413 0.706304648 0.677781683 0.642930622 0.615216256 0.593588952 0.575227915 0.561490726 0.549372457 0.539720625 0.535504521 0.529099197 0.515518910 0.505143371 0.482675351 0.463576007 0.467255409 0.444875501 0.430804997 0.417351819 0.395571593 0.354611000
+        0.763692083 0.755309136 0.730545470 0.696663368 0.660532586 0.611941667 0.631109273 0.637750236 0.645538715 0.646399290 0.657705784 0.671783979 0.692921732 0.713720892 0.735242143 0.753686174 0.771138927 0.805410987 0.834969148 0.861043012 0.883761969 0.905063844 0.925378025 0.944296101 0.962872808 0.979229414 0.992808304 1.000000000 0.994185652 0.981802282 0.968440758 0.955409933 0.924320950 0.892540331 0.864393754 0.843527095 0.821581741 0.800999927 0.783559096 0.764937200 0.745564760 0.728161523 0.700357766 0.665526203 0.637592712 0.615790491 0.597177845 0.582705679 0.569768836 0.559412431 0.555081316 0.548653967 0.535255802 0.525695845 0.503170824 0.483643149 0.487189652 0.463713683 0.446156606 0.432274411 0.411058267 0.368638617
+        0.754128870 0.745418032 0.720452785 0.686897701 0.651228551 0.600548216 0.617157180 0.624565342 0.632107890 0.632348726 0.642968742 0.656435586 0.677778238 0.698680156 0.720374704 0.739043451 0.756374021 0.789930483 0.819602813 0.845272097 0.867553991 0.888609307 0.909698324 0.928890910 0.947813449 0.965013670 0.980090092 0.994185652 1.000000000 0.994150208 0.982835607 0.970485740 0.939991268 0.909741470 0.881586720 0.860532215 0.838367280 0.818487924 0.801119936 0.782567374 0.763602019 0.746717998 0.719024783 0.683789946 0.655538484 0.633702095 0.614992987 0.600499845 0.587545104 0.576184757 0.571577541 0.565437777 0.552107561 0.542907232 0.519931980 0.500366990 0.502578859 0.476248728 0.456731904 0.443049297 0.422456988 0.380051200
+        0.744273823 0.735529894 0.710961627 0.677316536 0.641719672 0.588997705 0.602721669 0.610451743 0.617992508 0.618139584 0.627951273 0.641231214 0.662436373 0.683301523 0.704624017 0.722863867 0.740260214 0.773231093 0.803049263 0.828166207 0.849570378 0.870698403 0.892671841 0.912357429 0.931756306 0.949508507 0.965331640 0.981802282 0.994150208 1.000000000 0.994555047 0.983719712 0.954312613 0.924174192 0.896260824 0.874840008 0.852317783 0.832037032 0.815217626 0.796680218 0.777923937 0.761547132 0.733472602 0.698582474 0.669915966 0.647582337 0.628420526 0.613959562 0.600818227 0.589218289 0.584936885 0.579064469 0.565956094 0.556431534 0.532382930 0.511986949 0.513872534 0.485714453 0.465636186 0.450877709 0.429516192 0.387956859
+        0.734216226 0.725528527 0.701394512 0.668071521 0.632237674 0.577499384 0.588311292 0.595774089 0.603504205 0.603625471 0.613110783 0.626363300 0.647637045 0.668330341 0.689728673 0.707648072 0.724966726 0.757567039 0.788046832 0.812508502 0.833425822 0.855015340 0.877214810 0.896957753 0.916463866 0.934415360 0.950869846 0.968440758 0.982835607 0.994555047 1.000000000 0.994932974 0.968477098 0.939367475 0.911424608 0.889977691 0.867212691 0.846636991 0.829794296 0.811124571 0.792293383 0.776040171 0.747688255 0.713561606 0.685762837 0.664129457 0.644999957 0.631124803 0.618007559 0.606465425 0.601737888 0.596158189 0.582728871 0.573077355 0.548453559 0.528033221 0.529457292 0.501197105 0.482174544 0.467548386 0.446761605 0.405181228
+        0.721137528 0.712604437 0.688744127 0.655568121 0.619768824 0.563139923 0.572201368 0.579109592 0.586348664 0.586337604 0.595944989 0.609761022 0.631107390 0.651886869 0.673641884 0.691643410 0.709026958 0.742559390 0.773774047 0.797578221 0.818373340 0.840698575 0.862767082 0.882018410 0.901675012 0.920269764 0.937118859 0.955409933 0.970485740 0.983719712 0.994932974 1.000000000 0.981638075 0.954092405 0.926524920 0.904877787 0.882388756 0.862391992 0.845381362 0.826792297 0.808581809 0.793082751 0.764927183 0.731068984 0.704570520 0.683596881 0.664736330 0.650453459 0.636667129 0.625260732 0.620739371 0.615430371 0.601426344 0.591997526 0.567241734 0.546880052 0.546781464 0.518704609 0.499605944 0.485384263 0.465544137 0.425482934
+        0.698803347 0.691230242 0.668279624 0.635949994 0.600363810 0.537065551 0.542964437 0.546793309 0.554477063 0.555585542 0.564526872 0.577624812 0.597819630 0.617640927 0.638863972 0.657405998 0.674134702 0.708014570 0.738699435 0.763621195 0.785161324 0.807476852 0.829433708 0.848157370 0.867264671 0.886803709 0.904898169 0.924320950 0.939991268 0.954312613 0.968477098 0.981638075 1.000000000 0.983538995 0.957706913 0.935987500 0.914651577 0.896060700 0.880637230 0.862615735 0.844845397 0.830346503 0.801991687 0.768905919 0.743132239 0.721921168 0.703627843 0.689035140 0.674635233 0.663626956 0.659754589 0.654866569 0.639836919 0.629700713 0.604121667 0.582286864 0.579423117 0.552881805 0.533306855 0.519094244 0.500329740 0.465522040
+        0.670189828 0.663650097 0.641661255 0.610222984 0.575458810 0.506654407 0.509879102 0.510790181 0.518415584 0.520652476 0.529205600 0.541308857 0.561148767 0.580147557 0.600435509 0.619981357 0.637174840 0.671646264 0.703518087 0.728218280 0.750268840 0.772566613 0.793831747 0.811757887 0.831044135 0.851776068 0.871028107 0.892540331 0.909741470 0.924174192 0.939367475 0.954092405 0.983538995 1.000000000 0.984806869 0.964020174 0.944105733 0.927117267 0.912213758 0.894385260 0.877046294 0.862770842 0.833322890 0.800972880 0.776004836 0.755464962 0.737592266 0.722535643 0.707403957 0.695789125 0.690373274 0.684148162 0.668454083 0.657335280 0.632856163 0.610867431 0.603220954 0.575140732 0.557374629 0.543168691 0.526976523 0.492870578
+        0.648595259 0.642851442 0.621614187 0.590334250 0.554978237 0.484245782 0.485605758 0.486449733 0.492098090 0.493648277 0.501994765 0.513780642 0.533010875 0.552081622 0.571959727 0.590898312 0.607599704 0.642542342 0.673287574 0.697059999 0.719150115 0.741638159 0.762869579 0.781082395 0.801167763 0.822415252 0.842076036 0.864393754 0.881586720 0.896260824 0.911424608 0.926524920 0.957706913 0.984806869 1.000000000 0.988020841 0.968971132 0.952712011 0.938234892 0.921340738 0.904874530 0.890757284 0.861116679 0.829658593 0.805850152 0.785750422 0.767604210 0.752100140 0.735084454 0.722595689 0.715787268 0.709200479 0.693805940 0.681300783 0.656543099 0.633142087 0.621907186 0.591795296 0.573567528 0.560578412 0.544366449 0.510064415
+        0.632936382 0.627911218 0.607454047 0.576468647 0.540885496 0.469499474 0.468426247 0.468315941 0.474119641 0.474623746 0.483210664 0.495161104 0.513356262 0.531657547 0.550977150 0.570314641 0.586767148 0.622684252 0.652934282 0.675306078 0.697607895 0.721218078 0.741160415 0.759724730 0.780863356 0.801817269 0.820933796 0.843527095 0.860532215 0.874840008 0.889977691 0.904877787 0.935987500 0.964020174 0.988020841 1.000000000 0.989458956 0.972837209 0.957207608 0.939870396 0.922988452 0.908409398 0.880065763 0.848911408 0.824047696 0.803986210 0.786179568 0.771028953 0.754201133 0.740603551 0.732520263 0.725460822 0.709601264 0.695778468 0.670348259 0.645039908 0.631700322 0.600662073 0.579974232 0.566198740 0.551510187 0.517257200
+        0.616540526 0.612094672 0.592405222 0.561786372 0.526141485 0.453353691 0.451981143 0.450400928 0.455368512 0.455144819 0.463201523 0.474055020 0.491251279 0.507920297 0.526602351 0.545948008 0.562652094 0.599796782 0.631539980 0.653618636 0.675987578 0.699089479 0.718422078 0.737819383 0.759567978 0.780666343 0.799359151 0.821581741 0.838367280 0.852317783 0.867212691 0.882388756 0.914651577 0.944105733 0.968971132 0.989458956 1.000000000 0.990408854 0.975177292 0.958632867 0.942649345 0.928382259 0.901113039 0.870727077 0.845009399 0.824246463 0.806384739 0.791568177 0.774522102 0.759074388 0.749745124 0.741741703 0.724200868 0.710545791 0.685810148 0.660042678 0.645414202 0.614480633 0.592939430 0.579314389 0.564841776 0.530236122
+        0.600130851 0.596170832 0.577170682 0.545516568 0.509086783 0.436416368 0.435643477 0.433411425 0.437661685 0.437389777 0.445657936 0.456058811 0.472668535 0.488383415 0.506006960 0.524637823 0.540713747 0.577728753 0.610301027 0.632259339 0.654132757 0.676804998 0.696553647 0.715817133 0.737886670 0.759635640 0.777955636 0.800999927 0.818487924 0.832037032 0.846636991 0.862391992 0.896060700 0.927117267 0.952712011 0.972837209 0.990408854 1.000000000 0.991733987 0.976909073 0.962537972 0.949136410 0.921870988 0.892485945 0.867343881 0.846295877 0.828619122 0.814638293 0.798568991 0.783111212 0.773161456 0.764747360 0.746822297 0.732786176 0.709329624 0.684850707 0.670670382 0.640059806 0.619237511 0.605167550 0.589955841 0.553791800
+        0.586637070 0.582828669 0.563905922 0.532012677 0.495417398 0.421481671 0.421173623 0.418927736 0.423477464 0.424032826 0.432123543 0.441204827 0.457987065 0.472946962 0.490156485 0.508238513 0.523841189 0.562207880 0.594634258 0.616606764 0.638293914 0.661404125 0.682235979 0.700585483 0.722133559 0.743702403 0.761134676 0.783559096 0.801119936 0.815217626 0.829794296 0.845381362 0.880637230 0.912213758 0.938234892 0.957207608 0.975177292 0.991733987 1.000000000 0.992377958 0.979232998 0.965800580 0.939084462 0.911245119 0.886837082 0.865834217 0.847403772 0.833921319 0.818701100 0.803914476 0.794865503 0.786350505 0.767764507 0.752900160 0.729191661 0.705203128 0.693968207 0.662520328 0.640719458 0.626871803 0.611834493 0.575691608
+        0.570441490 0.566721300 0.547714590 0.516083694 0.480078437 0.405428093 0.404768931 0.402123223 0.406548167 0.407091063 0.414445146 0.422575253 0.439130079 0.453366508 0.470058406 0.488292909 0.504457115 0.544157126 0.576942969 0.598515398 0.620318278 0.644427961 0.665373624 0.683203100 0.705172595 0.726734948 0.743106649 0.764937200 0.782567374 0.796680218 0.811124571 0.826792297 0.862615735 0.894385260 0.921340738 0.939870396 0.958632867 0.976909073 0.992377958 1.000000000 0.992940910 0.980287770 0.954405592 0.928704925 0.905747913 0.886158403 0.867291194 0.853743911 0.839055275 0.824901370 0.815971896 0.807383716 0.788481252 0.773058485 0.749552436 0.725430312 0.715306652 0.684390394 0.661759771 0.649062742 0.633832190 0.595807459
+        0.556540670 0.553020290 0.534528870 0.504048834 0.469347369 0.393791269 0.391713589 0.388393163 0.391564950 0.392164268 0.398937719 0.405919014 0.422142181 0.436991418 0.454634719 0.472911017 0.489175229 0.527351829 0.559225210 0.579387213 0.600279507 0.625063502 0.646403599 0.664038261 0.686196619 0.707464283 0.723754413 0.745564760 0.763602019 0.777923937 0.792293383 0.808581809 0.844845397 0.877046294 0.904874530 0.922988452 0.942649345 0.962537972 0.979232998 0.992940910 1.000000000 0.993504221 0.970181484 0.945335811 0.923915471 0.905084353 0.886252938 0.872661766 0.858618893 0.844604622 0.835605457 0.826948653 0.808414658 0.792965711 0.769848189 0.745251644 0.734809306 0.705186975 0.683325524 0.671466883 0.655909098 0.616808159
+        0.541626641 0.538275353 0.520236877 0.490431526 0.456101348 0.380915465 0.378805455 0.374883426 0.377626453 0.377080765 0.383427624 0.389474729 0.405149095 0.419899796 0.437505595 0.455759977 0.472345733 0.510342804 0.541523783 0.561003780 0.581596469 0.607281741 0.629783687 0.648323052 0.669768852 0.690327886 0.706304648 0.728161523 0.746717998 0.761547132 0.776040171 0.793082751 0.830346503 0.862770842 0.890757284 0.908409398 0.928382259 0.949136410 0.965800580 0.980287770 0.993504221 1.000000000 0.983960501 0.960158691 0.939613425 0.921947907 0.904582604 0.890713276 0.877104493 0.862695121 0.852413387 0.843449825 0.825422708 0.810842147 0.787762244 0.763535774 0.752315603 0.723105274 0.701638253 0.690121946 0.673817186 0.635307705
+        0.528993811 0.525393138 0.507911645 0.479238029 0.445579100 0.371943130 0.371762114 0.368103453 0.369422885 0.367321133 0.372218848 0.375384279 0.390700404 0.404944759 0.421968892 0.439640108 0.455559793 0.493508756 0.520310447 0.536573129 0.556366577 0.581131788 0.602463002 0.620371924 0.641667578 0.661915271 0.677781683 0.700357766 0.719024783 0.733472602 0.747688255 0.764927183 0.801991687 0.833322890 0.861116679 0.880065763 0.901113039 0.921870988 0.939084462 0.954405592 0.970181484 0.983960501 1.000000000 0.985418150 0.965400860 0.947574842 0.931611460 0.917473723 0.903713867 0.889462692 0.879048666 0.870018452 0.851700395 0.837876146 0.815395745 0.791163409 0.779925869 0.750903010 0.730395857 0.717967558 0.700891537 0.664055282
+        0.518067400 0.515402026 0.499247836 0.474326737 0.441320331 0.368567710 0.364754462 0.357924339 0.356726995 0.353822231 0.355890544 0.357490128 0.371814153 0.385413845 0.400600713 0.416870141 0.431793892 0.467832893 0.492785876 0.506393869 0.524838746 0.547731229 0.567565408 0.584327139 0.606345410 0.626890816 0.642930622 0.665526203 0.683789946 0.698582474 0.713561606 0.731068984 0.768905919 0.800972880 0.829658593 0.848911408 0.870727077 0.892485945 0.911245119 0.928704925 0.945335811 0.960158691 0.985418150 1.000000000 0.987181943 0.969560274 0.953707715 0.939787871 0.926192955 0.911688060 0.900327674 0.890977737 0.871625115 0.858428147 0.837467685 0.814512727 0.803058000 0.775111246 0.752923049 0.738669004 0.720369328 0.684394961
+        0.494511874 0.491995546 0.476489272 0.451941391 0.420154846 0.347857881 0.342586661 0.335222120 0.333375827 0.330522280 0.332325762 0.332760862 0.346475259 0.360995737 0.375894609 0.390834026 0.404815844 0.439714609 0.464495956 0.478261417 0.495871759 0.519871077 0.539635481 0.556168042 0.578838233 0.599082332 0.615216256 0.637592712 0.655538484 0.669915966 0.685762837 0.704570520 0.743132239 0.776004836 0.805850152 0.824047696 0.845009399 0.867343881 0.886837082 0.905747913 0.923915471 0.939613425 0.965400860 0.987181943 1.000000000 0.989545067 0.973868486 0.960494874 0.946919518 0.932410480 0.921253735 0.911724860 0.892732944 0.878497770 0.857382559 0.835510836 0.823044717 0.797159548 0.776927194 0.762772025 0.743974698 0.706169171
+        0.476965753 0.474471605 0.459554239 0.436068643 0.404865399 0.330967414 0.326163442 0.318370632 0.316061615 0.312790035 0.313675494 0.313967306 0.327027891 0.341744537 0.356111071 0.370873976 0.383968164 0.418897169 0.443024302 0.456448470 0.474379462 0.498788919 0.518485506 0.535213259 0.557998057 0.577875045 0.593588952 0.615790491 0.633702095 0.647582337 0.664129457 0.683596881 0.721921168 0.755464962 0.785750422 0.803986210 0.824246463 0.846295877 0.865834217 0.886158403 0.905084353 0.921947907 0.947574842 0.969560274 0.989545067 1.000000000 0.991217256 0.978036795 0.964074132 0.949752301 0.938072033 0.928156333 0.909188154 0.894858501 0.874422893 0.854208639 0.841685230 0.816003233 0.794462365 0.779529183 0.760413104 0.721304101
+        0.467681175 0.465274680 0.450632108 0.429005528 0.400049713 0.323162605 0.317761408 0.309724837 0.307808198 0.305808990 0.307423499 0.309698716 0.321883357 0.334913853 0.347073209 0.361475680 0.373417718 0.406342268 0.429168012 0.443626467 0.461080448 0.484955629 0.503506571 0.519933278 0.541884883 0.560794732 0.575227915 0.597177845 0.614992987 0.628420526 0.644999957 0.664736330 0.703627843 0.737592266 0.767604210 0.786179568 0.806384739 0.828619122 0.847403772 0.867291194 0.886252938 0.904582604 0.931611460 0.953707715 0.973868486 0.991217256 1.000000000 0.992481165 0.979031709 0.964487154 0.951984229 0.941102825 0.921942653 0.906937861 0.887275050 0.866761340 0.854546917 0.830185558 0.809841631 0.793789262 0.774388186 0.734778759
+        0.459943411 0.457684886 0.443887177 0.423980829 0.395769563 0.321046152 0.313455213 0.305682446 0.303464717 0.301518184 0.301935949 0.302466457 0.314095902 0.326304502 0.337578577 0.351910460 0.362866364 0.393734228 0.416706147 0.431722335 0.449401990 0.473600121 0.491449857 0.507589302 0.528614796 0.547203765 0.561490726 0.582705679 0.600499845 0.613959562 0.631124803 0.650453459 0.689035140 0.722535643 0.752100140 0.771028953 0.791568177 0.814638293 0.833921319 0.853743911 0.872661766 0.890713276 0.917473723 0.939787871 0.960494874 0.978036795 0.992481165 1.000000000 0.992680886 0.979415209 0.967423180 0.956408601 0.937147632 0.920515510 0.901559359 0.880728349 0.868467283 0.844973436 0.825545291 0.809170358 0.789750612 0.750310219
+        0.467091314 0.465508019 0.453676323 0.437159862 0.410990864 0.333837862 0.322883212 0.313064776 0.309172957 0.305559435 0.303933831 0.302581884 0.312982403 0.323121214 0.333131292 0.347919156 0.358636506 0.387257753 0.409062703 0.423844795 0.441288735 0.466111433 0.483229527 0.498505417 0.518232765 0.535994440 0.549372457 0.569768836 0.587545104 0.600818227 0.618007559 0.636667129 0.674635233 0.707403957 0.735084454 0.754201133 0.774522102 0.798568991 0.818701100 0.839055275 0.858618893 0.877104493 0.903713867 0.926192955 0.946919518 0.964074132 0.979031709 0.992680886 1.000000000 0.993376358 0.982983662 0.972752863 0.954049179 0.936444204 0.917149007 0.896086823 0.883274424 0.860372144 0.840698066 0.824522815 0.803606701 0.763724118
+        0.466125719 0.464989384 0.454063440 0.439031229 0.414447111 0.336077484 0.326897555 0.316347853 0.313023066 0.310789045 0.309031533 0.306199900 0.315845362 0.325465647 0.334086897 0.347781531 0.357603963 0.385395888 0.405902074 0.419800364 0.435855549 0.460100699 0.477268008 0.491561153 0.510171160 0.526901124 0.539720625 0.559412431 0.576184757 0.589218289 0.606465425 0.625260732 0.663626956 0.695789125 0.722595689 0.740603551 0.759074388 0.783111212 0.803914476 0.824901370 0.844604622 0.862695121 0.889462692 0.911688060 0.932410480 0.949752301 0.964487154 0.979415209 0.993376358 1.000000000 0.994831778 0.985876009 0.968379551 0.950555401 0.931415874 0.911013019 0.896470404 0.873284821 0.853349923 0.838230714 0.816197107 0.777354214
+        0.465891941 0.464672388 0.454152128 0.439119060 0.414626756 0.335971173 0.326786547 0.316156760 0.313680039 0.311188137 0.309192298 0.305430485 0.313717071 0.323318314 0.332882535 0.347503075 0.356952598 0.384024849 0.404829344 0.418384709 0.433573677 0.457359995 0.474731561 0.488620707 0.505388571 0.522052463 0.535504521 0.555081316 0.571577541 0.584936885 0.601737888 0.620739371 0.659754589 0.690373274 0.715787268 0.732520263 0.749745124 0.773161456 0.794865503 0.815971896 0.835605457 0.852413387 0.879048666 0.900327674 0.921253735 0.938072033 0.951984229 0.967423180 0.982983662 0.994831778 1.000000000 0.995572903 0.978819124 0.960520046 0.941679844 0.921935693 0.906534958 0.883214300 0.862440172 0.846539221 0.825195593 0.788230830
+        0.460384183 0.458927370 0.447873723 0.432376218 0.407621549 0.329302063 0.320791399 0.310549151 0.308066980 0.306296417 0.304332821 0.300673821 0.309522978 0.319365187 0.329531653 0.344891466 0.354545886 0.381568435 0.401684269 0.414824131 0.429647421 0.453103576 0.470019281 0.483146893 0.498916704 0.515492441 0.529099197 0.548653967 0.565437777 0.579064469 0.596158189 0.615430371 0.654866569 0.684148162 0.709200479 0.725460822 0.741741703 0.764747360 0.786350505 0.807383716 0.826948653 0.843449825 0.870018452 0.890977737 0.911724860 0.928156333 0.941102825 0.956408601 0.972752863 0.985876009 0.995572903 1.000000000 0.987265647 0.968490735 0.949398628 0.929693100 0.914076122 0.890966585 0.870858532 0.855151540 0.834216891 0.798942709
+        0.447657660 0.445960781 0.434358458 0.417956810 0.392294122 0.315903531 0.306947067 0.297864416 0.295076975 0.295131464 0.293449546 0.290090051 0.299951916 0.310962838 0.322391412 0.337223378 0.346082342 0.371714812 0.390242030 0.405052153 0.419633298 0.442158187 0.457572144 0.470172841 0.486192237 0.501977186 0.515518910 0.535255802 0.552107561 0.565956094 0.582728871 0.601426344 0.639836919 0.668454083 0.693805940 0.709601264 0.724200868 0.746822297 0.767764507 0.788481252 0.808414658 0.825422708 0.851700395 0.871625115 0.892732944 0.909188154 0.921942653 0.937147632 0.954049179 0.968379551 0.978819124 0.987265647 1.000000000 0.988905546 0.971156177 0.952268832 0.936202255 0.915648423 0.898224725 0.882650968 0.861796234 0.830129231
+        0.441378795 0.440101928 0.428919977 0.412327683 0.385783148 0.312372640 0.305667553 0.298356521 0.295461037 0.295872886 0.293011088 0.286175681 0.294943875 0.306165169 0.317042426 0.329883434 0.337175955 0.359793112 0.377716151 0.392564773 0.408018661 0.431052969 0.447043980 0.460470291 0.477849233 0.492295849 0.505143371 0.525695845 0.542907232 0.556431534 0.573077355 0.591997526 0.629700713 0.657335280 0.681300783 0.695778468 0.710545791 0.732786176 0.752900160 0.773058485 0.792965711 0.810842147 0.837876146 0.858428147 0.878497770 0.894858501 0.906937861 0.920515510 0.936444204 0.950555401 0.960520046 0.968490735 0.988905546 1.000000000 0.989935594 0.973239320 0.958068275 0.940025622 0.923972912 0.909276123 0.890558074 0.863419172
+        0.419929380 0.418578711 0.407199580 0.390718170 0.364703220 0.292619233 0.287341638 0.281200152 0.278371488 0.278990978 0.274593213 0.266462404 0.275501618 0.287931470 0.300098589 0.312553164 0.318916422 0.338666531 0.355556786 0.371408735 0.386465311 0.409003716 0.424053991 0.436623890 0.454711228 0.469513920 0.482675351 0.503170824 0.519931980 0.532382930 0.548453559 0.567241734 0.604121667 0.632856163 0.656543099 0.670348259 0.685810148 0.709329624 0.729191661 0.749552436 0.769848189 0.787762244 0.815395745 0.837467685 0.857382559 0.874422893 0.887275050 0.901559359 0.917149007 0.931415874 0.941679844 0.949398628 0.971156177 0.989935594 1.000000000 0.991691687 0.978763164 0.963690232 0.948213960 0.933929338 0.916174312 0.891643991
+        0.402770275 0.401214002 0.389843410 0.373967595 0.348892179 0.280248030 0.275970914 0.271399645 0.268622071 0.267324448 0.262019434 0.253842515 0.262448020 0.274861110 0.286926765 0.298647778 0.304391592 0.321962039 0.338060659 0.354258036 0.368352442 0.390815816 0.405330662 0.417916853 0.435764958 0.450580072 0.463576007 0.483643149 0.500366990 0.511986949 0.528033221 0.546880052 0.582286864 0.610867431 0.633142087 0.645039908 0.660042678 0.684850707 0.705203128 0.725430312 0.745251644 0.763535774 0.791163409 0.814512727 0.835510836 0.854208639 0.866761340 0.880728349 0.896086823 0.911013019 0.921935693 0.929693100 0.952268832 0.973239320 0.991691687 1.000000000 0.993595248 0.980406376 0.965648634 0.950884209 0.934166833 0.911343164
+        0.409048639 0.407688681 0.397056695 0.381848592 0.357830909 0.290766108 0.286063278 0.283219496 0.282411518 0.282158234 0.278051027 0.268766903 0.276276401 0.288000123 0.302118806 0.315799115 0.321091927 0.337149268 0.351054868 0.364224754 0.376066786 0.400032678 0.413916872 0.425563532 0.440615871 0.454558823 0.467255409 0.487189652 0.502578859 0.513872534 0.529457292 0.546781464 0.579423117 0.603220954 0.621907186 0.631700322 0.645414202 0.670670382 0.693968207 0.715306652 0.734809306 0.752315603 0.779925869 0.803058000 0.823044717 0.841685230 0.854546917 0.868467283 0.883274424 0.896470404 0.906534958 0.914076122 0.936202255 0.958068275 0.978763164 0.993595248 1.000000000 0.993026697 0.981015917 0.967271742 0.951464983 0.931015807
+        0.407614656 0.405891106 0.395959027 0.382643147 0.361144444 0.306970917 0.300263857 0.293617699 0.290206583 0.292110467 0.288451408 0.277634726 0.281420646 0.294133111 0.306425395 0.316085084 0.318255597 0.331189588 0.343741052 0.354811270 0.362685030 0.384069571 0.395008131 0.406239072 0.421772989 0.433855649 0.444875501 0.463713683 0.476248728 0.485714453 0.501197105 0.518704609 0.552881805 0.575140732 0.591795296 0.600662073 0.614480633 0.640059806 0.662520328 0.684390394 0.705186975 0.723105274 0.750903010 0.775111246 0.797159548 0.816003233 0.830185558 0.844973436 0.860372144 0.873284821 0.883214300 0.890966585 0.915648423 0.940025622 0.963690232 0.980406376 0.993026697 1.000000000 0.993978542 0.981867206 0.966916287 0.948046812
+        0.396021594 0.394456219 0.384472121 0.371369841 0.347895826 0.299373684 0.293958754 0.287088479 0.285660879 0.289709619 0.286332638 0.274937010 0.279922024 0.292219131 0.305054461 0.313419871 0.315234055 0.327291574 0.337998036 0.349292709 0.355378232 0.376313732 0.385989904 0.396941043 0.412532101 0.423004536 0.430804997 0.446156606 0.456731904 0.465636186 0.482174544 0.499605944 0.533306855 0.557374629 0.573567528 0.579974232 0.592939430 0.619237511 0.640719458 0.661759771 0.683325524 0.701638253 0.730395857 0.752923049 0.776927194 0.794462365 0.809841631 0.825545291 0.840698066 0.853349923 0.862440172 0.870858532 0.898224725 0.923972912 0.948213960 0.965648634 0.981015917 0.993978542 1.000000000 0.994161539 0.982017362 0.965411448
+        0.388023676 0.387127235 0.379463066 0.368779338 0.346769536 0.297351745 0.290136746 0.283841030 0.282668509 0.286648955 0.282976017 0.271795167 0.276053857 0.287580691 0.299876324 0.308003502 0.308869052 0.317595706 0.327063915 0.338303391 0.343260457 0.364472634 0.373069949 0.383166929 0.397753600 0.408583246 0.417351819 0.432274411 0.443049297 0.450877709 0.467548386 0.485384263 0.519094244 0.543168691 0.560578412 0.566198740 0.579314389 0.605167550 0.626871803 0.649062742 0.671466883 0.690121946 0.717967558 0.738669004 0.762772025 0.779529183 0.793789262 0.809170358 0.824522815 0.838230714 0.846539221 0.855151540 0.882650968 0.909276123 0.933929338 0.950884209 0.967271742 0.981867206 0.994161539 1.000000000 0.994786494 0.982542990
+        0.374414280 0.374517227 0.366941903 0.357389576 0.335928741 0.290186844 0.282338477 0.277461634 0.276289052 0.279832113 0.276909997 0.265717553 0.270090412 0.280332211 0.290794284 0.297064428 0.296407372 0.299746833 0.309826727 0.321379107 0.325705273 0.345928556 0.353855693 0.363913564 0.376298229 0.385674105 0.395571593 0.411058267 0.422456988 0.429516192 0.446761605 0.465544137 0.500329740 0.526976523 0.544366449 0.551510187 0.564841776 0.589955841 0.611834493 0.633832190 0.655909098 0.673817186 0.700891537 0.720369328 0.743974698 0.760413104 0.774388186 0.789750612 0.803606701 0.816197107 0.825195593 0.834216891 0.861796234 0.890558074 0.916174312 0.934166833 0.951464983 0.966916287 0.982017362 0.994786494 1.000000000 0.994598788
+        0.327591227 0.327475695 0.319627396 0.309845437 0.287061335 0.244808717 0.246124740 0.243767437 0.246189710 0.251575366 0.249258668 0.239620288 0.245635104 0.255837514 0.264918559 0.271319428 0.267233297 0.264459231 0.276507212 0.286839305 0.290190152 0.306793984 0.313364781 0.322319411 0.334237875 0.343985400 0.354611000 0.368638617 0.380051200 0.387956859 0.405181228 0.425482934 0.465522040 0.492870578 0.510064415 0.517257200 0.530236122 0.553791800 0.575691608 0.595807459 0.616808159 0.635307705 0.664055282 0.684394961 0.706169171 0.721304101 0.734778759 0.750310219 0.763724118 0.777354214 0.788230830 0.798942709 0.830129231 0.863419172 0.891643991 0.911343164 0.931015807 0.948046812 0.965411448 0.982542990 0.994598788 1.000000000
+        """ , dtype=float, sep=" ").reshape(-1, len(periods))
+
         if np.any([T1, T2] < periods[0]) or \
                 np.any([T1, T2] > periods[-1]):
             raise ValueError("Period array contains values outside of the "
@@ -1615,14 +1158,11 @@ class conditional_spectrum(utility):
         if T1 == T2:
             rho = 1.0
         else:
-            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Meta_Data', 'akkar_coeff_table.npy'),
-                      'rb') as f:
-                coeff_table = np.load(f)
             rho = interpolate.interp2d(periods, periods, coeff_table, kind='linear')(T1, T2)[0]
 
         return rho
 
-    def get_correlation(self, T1, T2):
+    def _get_correlation(self, T1, T2):
         """
         Details
         -------
@@ -1642,8 +1182,8 @@ class conditional_spectrum(utility):
         """
 
         correlation_function_handles = {
-            'baker_jayaram': self.BakerJayaramCorrelationModel,
-            'akkar': self.AkkarCorrelationModel,
+            'baker_jayaram': self._BakerJayaramCorrelationModel,
+            'akkar': self._AkkarCorrelationModel,
         }
 
         # Check for existing correlation function
@@ -1655,111 +1195,124 @@ class conditional_spectrum(utility):
 
         return rho
 
-    def Sa_avg(self, bgmpe, scenario, T):
+    def _gmpe_sb_2014_ratios(self, T):
         """
         Details
         -------
-        GMPM of average spectral acceleration
-        The code will get as input the selected periods, 
-        Magnitude, distance and all other parameters of the 
-        selected GMPM and 
-        will return the median and logarithmic Spectral 
-        acceleration of the product of the Spectral
-        accelerations at selected periods; 
+        Computes Sa_RotD100/Sa_RotD50 ratios.
+
+        References
+        ----------
+        Shahi, S. K., and Baker, J. W. (2014). "NGA-West2 models for ground-
+        motion directionality." Earthquake Spectra, 30(3), 1285-1300.
+
+        Parameters
+        ----------
+        T: numpy.ndarray
+            Period(s) of interest (sec)
+
+        Returns
+        -------
+        ratio: float
+             geometric mean of Sa_RotD100/Sa_RotD50
+        sigma: float
+            standard deviation of log(Sa_RotD100/Sa_RotD50)
+        """
+
+        # Model coefficient values from Table 1 of the above-reference paper
+        periods_orig = np.array([0.0100000000000000, 0.0200000000000000, 0.0300000000000000, 0.0500000000000000, 0.0750000000000000,
+                        0.100000000000000, 0.150000000000000, 0.200000000000000, 0.250000000000000, 0.300000000000000,
+                        0.400000000000000, 0.500000000000000, 0.750000000000000, 1, 1.50000000000000, 2, 3, 4, 5,
+                        7.50000000000000, 10])
+        ratios_orig = np.array([1.19243805900000, 1.19124621700000, 1.18767783300000, 1.18649074900000, 1.18767783300000,
+                       1.18767783300000, 1.19961419400000, 1.20562728500000, 1.21652690500000, 1.21896239400000,
+                       1.22875320400000, 1.22875320400000, 1.23738465100000, 1.24110237900000, 1.24234410200000,
+                       1.24358706800000, 1.24732343100000, 1.25985923900000, 1.264908769000, 1.28531008400000,
+                       1.29433881900000])
+        sigma_orig = np.array([0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08,
+                      0.08, 0.08, 0.08, 0.08])
+
+        # Interpolate to compute values for the user-specified periods
+        f = interpolate.interp1d(np.log(periods_orig), ratios_orig)(np.log(T))
+        ratio = interpolate.interp1d(np.log(periods_orig), ratios_orig)(np.log(T))
+        sigma = interpolate.interp1d(np.log(periods_orig), sigma_orig)(np.log(T))
+
+        return ratio, sigma
+
+    def _get_cond_param(self, sctx, rctx, dctx):
+        """
+        Details
+        -------
+        This function calculates the logarithmic mean and standard deviation of intensity measure predicted by the selected GMPM at conditioning periods. 
+        Moreover, it calculates the correlation coefficients between any period and conditioning period Tstar.
     
         Parameters
         ----------
-        bgmpe : openquake object
-            the openquake gmpe object.
-        scenario : list
-            [sites, rup, dists] source, distance and site context 
-            of openquake gmpe object for the specified scenario.
-        T : numpy.array
-            Array of interested Periods (sec).
+        sctx : openquake object
+            An instance of SitesContext with sites information to calculate PoEs on.
+        rctx : openquake object
+            An instance of RuptureContext with a single rupture information.
+        dctx : openquake object
+            An instance of DistancesContext with information about the distances between sites and a rupture.
     
         Returns
         -------
-        Sa : numpy.array
-            Mean of logarithmic average spectral acceleration prediction.
-        sigma : numpy.array
-           logarithmic standard deviation of average spectral acceleration prediction.
+        mu_lnSaTstar : float
+            Logarithmic mean of intensity measure according to the selected GMPM.
+        sigma_lnSaTstar : float
+           Logarithmic standard deviation of intensity measure according to the selected GMPM.
+        rho_T_Tstar : numpy.array
+            Correlation coefficients.
         """
 
-        n = len(T)
-        mu_lnSaTstar = np.zeros(n)
-        sigma_lnSaTstar = np.zeros(n)
+        n = len(self.Tstar)
+        mu_lnSaT = np.zeros(n)
+        sigma_lnSaT = np.zeros(n)
         MoC = np.zeros((n, n))
+
         # Get the GMPE output
         for i in range(n):
-            mu_lnSaTstar[i], stddvs_lnSaTstar = bgmpe.get_mean_and_stddevs(scenario[0], scenario[1], scenario[2],
-                                                                           imt.SA(period=T[i]), [const.StdDev.TOTAL])
-            # convert to sigma_arb
-            # One should uncomment this line if the arbitary component is used for
-            # record selection.
-            # ro_xy = 0.79-0.23*np.log(T[k])
-            ro_xy = 1
-            sigma_lnSaTstar[i] = np.log(((np.exp(stddvs_lnSaTstar[0][0]) ** 2) * (2 / (1 + ro_xy))) ** 0.5)
+            mu_lnSaT[i], stddvs_lnSa = self.bgmpe.get_mean_and_stddevs(sctx, rctx, dctx, imt.SA(period=self.Tstar[i]), [const.StdDev.TOTAL])
+            sigma_lnSaT[i] = stddvs_lnSa[0]
+
+            # modify spectral targets if RotD100 values were specified for two-component selection
+            if self.Sa_def == 'RotD100' and not 'RotD100' in self.bgmpe.DEFINED_FOR_INTENSITY_MEASURE_COMPONENT and self.selection == 2:
+                rotD100Ratio, rotD100Sigma = self._gmpe_sb_2014_ratios(self.Tstar[i])
+                mu_lnSaT[i] = mu_lnSaT[i] + np.log(rotD100Ratio)
+                sigma_lnSaT[i] = (sigma_lnSaT[i]**2 + rotD100Sigma**2)
 
             for j in range(n):
-                rho = self.get_correlation(T[i], T[j])
+                rho = self._get_correlation(self.Tstar[i], self.Tstar[j])
                 MoC[i, j] = rho
 
-        SPa_avg_meanLn = (1 / n) * sum(mu_lnSaTstar)  # logarithmic mean of Sa,avg
+        Sa_avg_meanLn = (1 / n) * sum(mu_lnSaT)  # logarithmic mean of AvgSa
 
-        SPa_avg_std = 0
+        Sa_avg_std = 0
         for i in range(n):
             for j in range(n):
-                SPa_avg_std = SPa_avg_std + (
-                        MoC[i, j] * sigma_lnSaTstar[i] * sigma_lnSaTstar[j])  # logarithmic Var of the Sa,avg
+                Sa_avg_std = Sa_avg_std + (MoC[i, j] * sigma_lnSaT[i] * sigma_lnSaT[j])  # logarithmic Var of the AvgSa
 
-        SPa_avg_std = SPa_avg_std * (1 / n) ** 2
-        # compute mean of logarithmic average spectral acceleration
-        # and logarithmic standard deviation of 
-        # spectral acceleration prediction
-        Sa = SPa_avg_meanLn
-        sigma = np.sqrt(SPa_avg_std)
-        return Sa, sigma
+        Sa_avg_std = Sa_avg_std * (1 / n) ** 2
 
-    def rho_AvgSA_SA(self, bgmpe, scenario, T, Tstar):
-        """
-        Details
-        -------  
-        Function to compute the correlation between Spectra acceleration and AvgSA.
-        
-        Parameters
-        ----------
-        bgmpe : openquake object
-            the openquake gmpe object.
-        scenario : list
-            [sites, rup, dists] source, distance and site context 
-            of openquake gmpe object for the specified scenario.
-        T     : numpy.array
-            Array of interested period to calculate correlation coefficient.
-    
-        Tstar : numpy.array
-            Period range where AvgSa is calculated.
-    
-        Returns
-        -------
-        rho : int
-            Predicted correlation coefficient.
-        """
+        # compute mean of logarithmic average spectral acceleration and logarithmic standard deviation of spectral acceleration prediction
+        mu_lnSaTstar = Sa_avg_meanLn
+        sigma_lnSaTstar = np.sqrt(Sa_avg_std)
 
-        rho = 0
-        for j in range(len(Tstar)):
-            rho_bj = self.get_correlation(T, Tstar[j])
-            _, sig1 = bgmpe.get_mean_and_stddevs(scenario[0], scenario[1], scenario[2], imt.SA(period=Tstar[j]),
-                                                 [const.StdDev.TOTAL])
-            rho = rho_bj * sig1[0][0] + rho
+        # compute correlation coefficients
+        rho_T_Tstar = np.zeros(len(self.T))
+        for i in range(len(self.T)):
+            for j in range(len(self.Tstar)):
+                rho_bj = self._get_correlation(self.T[i], self.Tstar[j])
+                rho_T_Tstar[i] = rho_bj * sigma_lnSaT[j] + rho_T_Tstar[i]
 
-        _, Avg_sig = self.Sa_avg(bgmpe, scenario, Tstar)
-        rho = rho / (len(Tstar) * Avg_sig)
-        return rho
+            rho_T_Tstar[i] = rho_T_Tstar[i] / (len(self.Tstar) * sigma_lnSaTstar)
 
-    def create(self, site_param={'vs30': 520}, rup_param={'rake': [0.0, 45.0], 'mag': [7.2, 6.5]},
+        return mu_lnSaTstar, sigma_lnSaTstar, rho_T_Tstar
+
+    def create(self, Tstar=0.5, gmpe='BooreEtAl2014', selection=1, Sa_def='RotD50',
+               site_param={'vs30': 520}, rup_param={'rake': [0.0, 45.0], 'mag': [7.2, 6.5]},
                dist_param={'rjb': [20, 5]}, Hcont=[0.6, 0.4], T_Tgt_range=[0.01, 4],
-               im_Tstar=1.0, epsilon=None, cond=1, useVar=1, corr_func='baker_jayaram',
-               outdir='Outputs'):
+               im_Tstar=1.0, epsilon=None, cond=1, useVar=1, corr_func='baker_jayaram'):
         """
         Details
         -------
@@ -1788,6 +1341,17 @@ class conditional_spectrum(utility):
 
         Parameters
         ----------
+        Tstar    : int, float, numpy.array, the default is None.
+            Conditioning period or periods in case of AvgSa [sec].
+        gmpe     : str, optional
+            GMPE model (see OpenQuake library).
+            The default is 'BooreEtAl2014'.
+        selection : int, optional, The default is 1.
+            1 for single-component selection and arbitrary component sigma.
+            2 for two-component selection and average component sigma.
+        Sa_def : str, optional, the default is 'RotD50'.
+            The spectra definition. Necessary if selection = 2.
+            'GeoMean', 'RotD50', 'RotD100'.
         site_param : dictionary
             Contains required site parameters to define target spectrum.
         rup_param  : dictionary
@@ -1811,30 +1375,59 @@ class conditional_spectrum(utility):
             1 to use variance in target spectrum
         corr_func: str, optional, the default is baker_jayaram
             correlation model to use "baker_jayaram","akkar"
-        outdir     : str, optional, the default is 'Outputs'.
-            output directory to create.
 
         Returns
         -------
         None.                    
         """
 
-        # create the output directory and add the path to self
-        cwd = os.getcwd()
-        outdir_path = os.path.join(cwd, outdir)
-        self.outdir = outdir_path
-        self.create_dir(self.outdir)
+        if cond == 1:
+
+            # add Tstar to self
+            if isinstance(Tstar, int) or isinstance(Tstar, float):
+                self.Tstar = np.array([Tstar])
+            elif isinstance(Tstar, numpy.ndarray):
+                self.Tstar = Tstar
+
+            # check if AvgSa or Sa is used as IM, then in case of Sa(T*) add T* and Sa(T*) if not present
+            if not self.Tstar[0] in self.database['Periods'] and len(self.Tstar) == 1:
+                f = interpolate.interp1d(self.database['Periods'], self.database['Sa_1'], axis=1)
+                Sa_int = f(self.Tstar[0])
+                Sa_int.shape = (len(Sa_int), 1)
+                Sa = np.append(self.database['Sa_1'], Sa_int, axis=1)
+                Periods = np.append(self.database['Periods'], self.Tstar[0])
+                self.database['Sa_1'] = Sa[:, np.argsort(Periods)]
+
+                f = interpolate.interp1d(self.database['Periods'], self.database['Sa_2'], axis=1)
+                Sa_int = f(self.Tstar[0])
+                Sa_int.shape = (len(Sa_int), 1)
+                Sa = np.append(self.database['Sa_2'], Sa_int, axis=1)
+                self.database['Sa_2'] = Sa[:, np.argsort(Periods)]
+
+                f = interpolate.interp1d(self.database['Periods'], self.database['Sa_RotD50'], axis=1)
+                Sa_int = f(self.Tstar[0])
+                Sa_int.shape = (len(Sa_int), 1)
+                Sa = np.append(self.database['Sa_RotD50'], Sa_int, axis=1)
+                self.database['Sa_RotD50'] = Sa[:, np.argsort(Periods)]
+
+                self.database['Periods'] = Periods[np.argsort(Periods)]
+
+        try:  # this is smth like self.bgmpe = gsim.boore_2014.BooreEtAl2014()
+            self.bgmpe = gsim.get_available_gsims()[gmpe]()
+            self.gmpe = gmpe
+
+        except:
+            raise KeyError('Not a valid gmpe')
 
         # add target spectrum settings to self
+        self.selection = selection
+        self.Sa_def = Sa_def
         self.cond = cond
         self.useVar = useVar
         self.corr_func = corr_func
         self.site_param = site_param
         self.rup_param = rup_param
         self.dist_param = dist_param
-
-        if cond == 0:  # there is no conditioning period
-            del self.Tstar
 
         nScenarios = len(rup_param['mag']) # number of scenarios
         if Hcont is None: # equal for all
@@ -1847,63 +1440,59 @@ class conditional_spectrum(utility):
         idx1 = np.where(temp == np.min(temp))[0][0]
         temp = np.abs(self.database['Periods'] - np.max(T_Tgt_range))
         idx2 = np.where(temp == np.min(temp))[0][0]
-        T_Tgt = self.database['Periods'][idx1:idx2 + 1]
+        self.T = self.database['Periods'][idx1:idx2 + 1]
 
         # Get number of scenarios, and their contribution
-        Hcont_mat = np.matlib.repmat(np.asarray(self.Hcont), len(T_Tgt), 1)
+        Hcont_mat = np.matlib.repmat(np.asarray(self.Hcont), len(self.T), 1)
 
         # Conditional spectrum, log parameters
-        TgtMean = np.zeros((len(T_Tgt), nScenarios))
+        TgtMean = np.zeros((len(self.T), nScenarios))
 
         # Covariance
-        TgtCov = np.zeros((nScenarios, len(T_Tgt), len(T_Tgt)))
+        TgtCov = np.zeros((nScenarios, len(self.T), len(self.T)))
 
         for n in range(nScenarios):
 
             # gmpe spectral values
-            mu_lnSaT = np.zeros(len(T_Tgt))
-            sigma_lnSaT = np.zeros(len(T_Tgt))
+            mu_lnSaT = np.zeros(len(self.T))
+            sigma_lnSaT = np.zeros(len(self.T))
 
             # correlation coefficients
-            rho_T_Tstar = np.zeros(len(T_Tgt))
+            rho_T_Tstar = np.zeros(len(self.T))
 
             # Covariance
-            Cov = np.zeros((len(T_Tgt), len(T_Tgt)))
+            Cov = np.zeros((len(self.T), len(self.T)))
 
-            # TODO: it could be better to calculate some parameters automatically elsewhere
             # Set the contexts for the scenario
-            # site_param['sids'] = [0]  # This might required in OQ version 3.12.0
-            sites = gsim.base.SitesContext()
+            sctx = gsim.base.SitesContext()
             for key in site_param.keys(): # Site parameters are constant for each scenario
                 temp = np.array([site_param[key]], dtype='float64')
-                setattr(sites, key, temp)
+                setattr(sctx, key, temp)
 
-            rup = gsim.base.RuptureContext()
+            rctx = gsim.base.RuptureContext()
             for key in rup_param.keys():
                 temp = np.array([rup_param[key][n]], dtype='float64')
-                setattr(rup, key, temp)
+                setattr(rctx, key, temp)
 
-            dists = gsim.base.DistancesContext()
+            dctx = gsim.base.DistancesContext()
             for key in dist_param.keys():
                 temp = np.array([dist_param[key][n]], dtype='float64')
-                setattr(dists, key, temp)
+                setattr(dctx, key, temp)
 
-            scenario = [sites, rup, dists]
-
-            for i in range(len(T_Tgt)):
+            for i in range(len(self.T)):
                 # Get the GMPE ouput for a rupture scenario
-                mu0, sigma0 = self.bgmpe.get_mean_and_stddevs(sites, rup, dists, imt.SA(period=T_Tgt[i]),
-                                                              [const.StdDev.TOTAL])
-                mu_lnSaT[i] = mu0
-                sigma_lnSaT[i] = sigma0[0]
-
-                if self.cond == 1:
-                    # Compute the correlations between each T and Tstar
-                    rho_T_Tstar[i] = self.rho_AvgSA_SA(self.bgmpe, scenario, T_Tgt[i], self.Tstar)
+                mu, sigma = self.bgmpe.get_mean_and_stddevs(sctx, rctx, dctx, imt.SA(period=self.T[i]),[const.StdDev.TOTAL])
+                mu_lnSaT[i] = mu
+                sigma_lnSaT[i] = sigma[0]
+                # modify spectral targets if RotD100 values were specified for two-component selection:
+                if self.Sa_def == 'RotD100' and not 'RotD100' in self.bgmpe.DEFINED_FOR_INTENSITY_MEASURE_COMPONENT and self.selection == 2:
+                    rotD100Ratio, rotD100Sigma = self._gmpe_sb_2014_ratios(self.T[i])
+                    mu_lnSaT[i] = mu_lnSaT[i] + np.log(rotD100Ratio)
+                    sigma_lnSaT[i] = (sigma_lnSaT[i] ** 2 + rotD100Sigma ** 2)
 
             if self.cond == 1:
-                # Get the GMPE output and calculate Avg_Sa_Tstar
-                mu_lnSaTstar, sigma_lnSaTstar = self.Sa_avg(self.bgmpe, scenario, self.Tstar)
+                # Get the GMPE output and calculate AvgSa_Tstar and associated dispersion
+                mu_lnSaTstar, sigma_lnSaTstar, rho_T_Tstar = self._get_cond_param(sctx, rctx, dctx)
 
                 if epsilon is None:
                     # Back calculate epsilon
@@ -1917,13 +1506,14 @@ class conditional_spectrum(utility):
             elif self.cond == 0:
                 TgtMean[:, n] = mu_lnSaT
 
-            for i in range(len(T_Tgt)):
-                for j in range(len(T_Tgt)):
+            for i in range(len(self.T)):
+                for j in range(len(self.T)):
 
                     var1 = sigma_lnSaT[i] ** 2
                     var2 = sigma_lnSaT[j] ** 2
-                    # using Baker & Jayaram 2008 as correlation model
-                    sigma_Corr = self.get_correlation(T_Tgt[i], T_Tgt[j]) * np.sqrt(var1 * var2)
+
+                    rho = self._get_correlation(self.T[i], self.T[j])
+                    sigma_Corr = rho * np.sqrt(var1 * var2)
 
                     if self.cond == 1:
                         varTstar = sigma_lnSaTstar ** 2
@@ -1942,24 +1532,23 @@ class conditional_spectrum(utility):
             # Get the value of standard deviation of target spectrum
             TgtCov[n, :, :] = Cov
 
-        # over-write coveriance matrix with zeros if no variance is desired in the ground motion selection
+        # over-write covariance matrix with zeros if no variance is desired in the ground motion selection
         if self.useVar == 0:
             TgtCov = np.zeros(TgtCov.shape)
 
         TgtMean_fin = np.sum(TgtMean * Hcont_mat, 1)
         # all 2D matrices are the same for each kk scenario, since sigma is only T dependent
         TgtCov_fin = TgtCov[0, :, :]
-        Cov_elms = np.zeros((len(T_Tgt), nScenarios))
-        for ii in range(len(T_Tgt)):
+        Cov_elms = np.zeros((len(self.T), nScenarios))
+        for ii in range(len(self.T)):
             for kk in range(nScenarios):
                 # Hcont[kk] = contribution of the k-th scenario
                 Cov_elms[ii, kk] = (TgtCov[kk, ii, ii] + (TgtMean[ii, kk] - TgtMean_fin[ii]) ** 2) * self.Hcont[kk]
 
         cov_diag = np.sum(Cov_elms, 1)
-        TgtCov_fin[np.eye(len(T_Tgt)) == 1] = cov_diag
+        TgtCov_fin[np.eye(len(self.T)) == 1] = cov_diag
 
         # Find covariance values of zero and set them to a small number so that
-        # random number generation can be performed
         # TgtCov_fin[np.abs(TgtCov_fin) < 1e-10] = 1e-10
         min_eig = np.min(np.real(np.linalg.eigvals(TgtCov_fin)))
         if min_eig < 0:
@@ -1971,7 +1560,6 @@ class conditional_spectrum(utility):
         # Add target spectrum to self
         self.mu_ln = TgtMean_fin
         self.sigma_ln = TgtSigma_fin
-        self.T = T_Tgt
         self.cov = TgtCov_fin
 
         if cond == 1:
@@ -1986,7 +1574,7 @@ class conditional_spectrum(utility):
 
         print('Target spectrum is created.')
 
-    def simulate_spectra(self):
+    def _simulate_spectra(self):
         """
         Details
         -------
@@ -2032,10 +1620,9 @@ class conditional_spectrum(utility):
         recUse = np.argmin(np.abs(devTotalSim))  # find the simulated spectra that best match the targets
         self.sim_spec = np.log(specDict[recUse])  # return the best set of simulations
 
-    def select(self, nGM=30, selection=1, Sa_def='RotD50', isScaled=1, maxScale=4,
+    def select(self, nGM=30, isScaled=1, maxScale=4,
                Mw_lim=None, Vs30_lim=None, Rjb_lim=None, fault_lim=None,
-               nTrials=20, weights=[1, 2, 0.3], seedValue=0,
-               nLoop=2, penalty=0, tol=10):
+               nTrials=20, weights=[1, 2, 0.3], seedValue=0, nLoop=2, penalty=0, tol=10):
         """
         Details
         -------
@@ -2052,12 +1639,6 @@ class conditional_spectrum(utility):
         ----------
         nGM : int, optional, the default is 30.
             Number of ground motions to be selected.
-        selection : int, optional, The default is 1.
-            1 for single-component selection and arbitrary component sigma.
-            2 for two-component selection and average component sigma. 
-        Sa_def : str, optional, the default is 'RotD50'.
-            The spectra definition. Necessary if selection = 2.
-            'GeoMean' or 'RotD50'. 
         isScaled : int, optional, the default is 1.
             0 not to allow use of amplitude scaling for spectral matching.
             1 to allow use of amplitude scaling for spectral matching.
@@ -2115,8 +1696,6 @@ class conditional_spectrum(utility):
 
         # Add selection settings to self
         self.nGM = nGM
-        self.selection = selection
-        self.Sa_def = Sa_def
         self.isScaled = isScaled
         self.Mw_lim = Mw_lim
         self.Vs30_lim = Vs30_lim
@@ -2130,16 +1709,11 @@ class conditional_spectrum(utility):
         self.tol = tol
         self.penalty = penalty
 
-        # Exsim provides a single gm component
-        if self.database['Name'].startswith("EXSIM"):
-            print('Warning! Selection = 1 for this database')
-            self.selection = 1
-
         # Simulate response spectra
-        self.simulate_spectra()
+        self._simulate_spectra()
 
         # Search the database and filter
-        sampleBig, Vs30, Mw, Rjb, fault, Filename_1, Filename_2, NGA_num, eq_ID, station_code = self.search_database()
+        sampleBig, Vs30, Mw, Rjb, fault, Filename_1, Filename_2, NGA_num, eq_ID, station_code = self._search_database()
 
         # Processing available spectra
         sampleBig = np.log(sampleBig)
@@ -2315,249 +1889,34 @@ class conditional_spectrum(utility):
         if self.database['Name'] == 'ESM_2018':
             self.rec_station_code = station_code[recID]
 
-
-class tbec_2018(utility):
+class code_spectrum(_subclass_):
     """
-    This class is used to
-        1) Create target spectrum based on TBEC2018
-        2) Selecting and scaling suitable ground motion sets for target spectrum in accordance with TBEC2018
-            - Currently, only supports the record selection from NGA_W2 record database
+    This class is used for
+        1) Creating target spectrum based on various codes (TBEC 2018, ASCE 7-16, EC8-Part1)
+        2) Selecting and scaling suitable ground motion sets for target spectrum in accordance with specified code
     """
 
-    def __init__(self, database='NGA_W2', outdir='Outputs'):
+    def __init__(self, database='NGA_W2', outdir='Outputs', target_path=None, nGM=11, selection=1,
+               Mw_lim=None, Vs30_lim=None, Rjb_lim=None, fault_lim=None, opt=1, maxScale=2, weights=[1, 1], RecPerEvent=3):
         """
         Details
         -------
-        Loads the record database to use
+        Loads the record database to use, creates output folder, sets selection criteria.
 
         Parameters
         ----------
         database : str, optional
-            Database to use: NGA_W2, ESM_2018, EXSIM_Duzce
+            Database to use: NGA_W2, ESM_2018
             The default is NGA_W2.
         outdir : str, optional
             Output directory
             The default is 'Outputs'
-
-        Returns
-        -------
-        None.
-        """
-
-        # Add the input the ground motion database to use
-        matfile = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Meta_Data', database)
-        self.database = loadmat(matfile, squeeze_me=True)
-        self.database['Name'] = database
-        # create the output directory and add the path to self
-        cwd = os.getcwd()
-        outdir_path = os.path.join(cwd, outdir)
-        self.outdir = outdir_path
-        self.create_dir(self.outdir)
-
-    @staticmethod
-    def get_Sae_tbec2018(T, Lat, Long, DD, Soil):
-        """
-        Details
-        -------
-        This method creates the target spectrum
-
-        References
-        ----------
-
-        Notes
-        -----
-
-        Parameters
-        ----------
-        Lat: float
-            Site latitude
-        Long: float
-            Site longitude
-        DD:  int
-            Earthquake ground motion intensity level (1,2,3,4)
-        Soil: str
-            Site soil class
-        T:  numpy.array
-            period array in which target spectrum is calculated
-
-        Returns
-        -------
-        Sae: numpy.array
-            Elastic acceleration response spectrum
-        """
-
-        csv_file = 'Parameters_TBEC2018.csv'
-        file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Meta_Data', csv_file)
-        data = pd.read_csv(file_path)
-
-        # Check if the coordinates are within the limits
-        if Long > np.max(data['Longitude']) or Long < np.min(data['Longitude']):
-            raise ValueError('Longitude value must be within the limits: [24.55,45.95]')
-        if Lat > np.max(data['Latitude']) or Lat < np.min(data['Latitude']):
-            raise ValueError('Latitude value must be within the limits: [34.25,42.95]')
-
-        # Targeted probability of exceedance in 50 years
-        if DD == 1:
-            PoE = '2'
-        elif DD == 2:
-            PoE = '10'
-        elif DD == 3:
-            PoE = '50'
-        elif DD == 4:
-            PoE = '68'
-
-        # Determine Peak Ground Acceleration PGA [g]
-        PGA_col = 'PGA (g) - %' + PoE
-        data_pga = np.array([data['Longitude'], data['Latitude'], data[PGA_col]]).T
-        PGA = interpolate.griddata(data_pga[:, 0:2], data_pga[:, 2], [(Long, Lat)], method='linear')
-
-        # Short period map spectral acceleration coefficient [dimensionless]
-        SS_col = 'SS (g) - %' + PoE
-        data_ss = np.array([data['Longitude'], data['Latitude'], data[SS_col]]).T
-        SS = interpolate.griddata(data_ss[:, 0:2], data_ss[:, 2], [(Long, Lat)], method='linear')
-
-        # Map spectral acceleration coefficient for a 1.0 second period [dimensionless]
-        S1_col = 'S1 (g) - %' + PoE
-        data_s1 = np.array([data['Longitude'], data['Latitude'], data[S1_col]]).T
-        S1 = interpolate.griddata(data_s1[:, 0:2], data_s1[:, 2], [(Long, Lat)], method='linear')
-
-        SoilParam = {
-            'FS': {
-                'ZA': [0.8, 0.8, 0.8, 0.8, 0.8, 0.8],
-                'ZB': [0.9, 0.9, 0.9, 0.9, 0.9, 0.9],
-                'ZC': [1.3, 1.3, 1.2, 1.2, 1.2, 1.2],
-                'ZD': [1.6, 1.4, 1.2, 1.1, 1.0, 1.0],
-                'ZE': [2.4, 1.7, 1.3, 1.1, 0.9, 0.8]
-            },
-
-            'SS': [0.25, 0.5, 0.75, 1.0, 1.25, 1.5],
-
-            'F1': {
-                'ZA': [0.8, 0.8, 0.8, 0.8, 0.8, 0.8],
-                'ZB': [0.8, 0.8, 0.8, 0.8, 0.8, 0.8],
-                'ZC': [1.5, 1.5, 1.5, 1.5, 1.5, 1.4],
-                'ZD': [2.4, 2.2, 2.0, 1.9, 1.8, 1.7],
-                'ZE': [4.2, 3.3, 2.8, 2.4, 2.2, 2.0]
-            },
-
-            'S1': [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
-
-        }
-
-        # Local soil response coefficient for the short period region
-        if SS <= SoilParam['SS'][0]:
-            FS = SoilParam['FS'][Soil][0]
-        elif SS > SoilParam['SS'][0] and SS <= SoilParam['SS'][1]:
-            FS = (SoilParam['FS'][Soil][1] - SoilParam['FS'][Soil][0]) \
-                 * (SS - SoilParam['SS'][0]) / (SoilParam['SS'][1] - SoilParam['SS'][0]) \
-                 + SoilParam['FS'][Soil][0]
-        elif SS > SoilParam['SS'][1] and SS <= SoilParam['SS'][2]:
-            FS = (SoilParam['FS'][Soil][2] - SoilParam['FS'][Soil][1]) \
-                 * (SS - SoilParam['SS'][1]) / (SoilParam['SS'][2] - SoilParam['SS'][1]) \
-                 + SoilParam['FS'][Soil][1]
-        elif SS > SoilParam['SS'][2] and SS <= SoilParam['SS'][3]:
-            FS = (SoilParam['FS'][Soil][3] - SoilParam['FS'][Soil][2]) \
-                 * (SS - SoilParam['SS'][2]) / (SoilParam['SS'][3] - SoilParam['SS'][2]) \
-                 + SoilParam['FS'][Soil][2]
-        elif SS > SoilParam['SS'][3] and SS <= SoilParam['SS'][4]:
-            FS = (SoilParam['FS'][Soil][4] - SoilParam['FS'][Soil][3]) \
-                 * (SS - SoilParam['SS'][3]) / (SoilParam['SS'][4] - SoilParam['SS'][3]) \
-                 + SoilParam['FS'][Soil][3]
-        elif SS > SoilParam['SS'][4] and SS <= SoilParam['SS'][5]:
-            FS = (SoilParam['FS'][Soil][5] - SoilParam['FS'][Soil][4]) \
-                 * (SS - SoilParam['SS'][4]) / (SoilParam['SS'][5] - SoilParam['SS'][4]) \
-                 + SoilParam['FS'][Soil][4]
-        elif SS >= SoilParam['SS'][5]:
-            FS = SoilParam['FS'][Soil][5]
-
-        # Local soil response coefficient for 1.0 second period
-        if S1 <= SoilParam['S1'][0]:
-            F1 = SoilParam['F1'][Soil][0]
-        elif S1 > SoilParam['S1'][0] and S1 <= SoilParam['S1'][1]:
-            F1 = (SoilParam['F1'][Soil][1] - SoilParam['F1'][Soil][0]) \
-                 * (S1 - SoilParam['S1'][0]) / (SoilParam['S1'][1] - SoilParam['S1'][0]) \
-                 + SoilParam['F1'][Soil][0]
-        elif S1 > SoilParam['S1'][1] and S1 <= SoilParam['S1'][2]:
-            F1 = (SoilParam['F1'][Soil][2] - SoilParam['F1'][Soil][1]) \
-                 * (S1 - SoilParam['S1'][1]) / (SoilParam['S1'][2] - SoilParam['S1'][1]) \
-                 + SoilParam['F1'][Soil][1]
-        elif S1 > SoilParam['S1'][2] and S1 <= SoilParam['S1'][3]:
-            F1 = (SoilParam['F1'][Soil][3] - SoilParam['F1'][Soil][2]) \
-                 * (S1 - SoilParam['S1'][2]) / (SoilParam['S1'][3] - SoilParam['S1'][2]) \
-                 + SoilParam['F1'][Soil][2]
-        elif S1 > SoilParam['S1'][3] and S1 <= SoilParam['S1'][4]:
-            F1 = (SoilParam['F1'][Soil][4] - SoilParam['F1'][Soil][3]) \
-                 * (S1 - SoilParam['S1'][3]) / (SoilParam['S1'][4] - SoilParam['S1'][3]) \
-                 + SoilParam['F1'][Soil][3]
-        elif S1 > SoilParam['S1'][4] and S1 <= SoilParam['S1'][5]:
-            F1 = (SoilParam['F1'][Soil][5] - SoilParam['F1'][Soil][4]) \
-                 * (S1 - SoilParam['S1'][4]) / (SoilParam['S1'][5] - SoilParam['S1'][4]) \
-                 + SoilParam['F1'][Soil][4]
-        elif S1 >= SoilParam['S1'][5]:
-            F1 = SoilParam['F1'][Soil][5]
-
-        SDS = SS * FS  # short period spectral acceleration coefficient
-        SD1 = S1 * F1  # spectral acceleration coefficient for 1.0
-
-        Sae = np.zeros(len(T))
-
-        TA = 0.2 * SD1 / SDS
-        TB = SD1 / SDS
-        TL = 6
-
-        for i in range(len(T)):
-            if T[i] == 0:
-                Sae[i] = PGA
-            elif T[i] <= TA:
-                Sae[i] = (0.4 + 0.6 * T[i] / TA) * SDS
-            elif TA < T[i] <= TB:
-                Sae[i] = SDS
-            elif TB < T[i] <= TL:
-                Sae[i] = SD1 / T[i]
-            elif T[i] > TL:
-                Sae[i] = SD1 * TL / T[i] ** 2
-
-        return Sae
-
-    def select(self, target_path=None, Lat=41.0582, Long=29.00951, DD=2, Soil='ZC', nGM=11, selection=1, Tp=1,
-               Mw_lim=None, Vs30_lim=None, Rjb_lim=None, fault_lim=None, opt=1,
-               maxScale=2, weights=[1, 1]):
-        """
-        Details
-        -------
-        Select the suitable ground motion set
-        in accordance with TBEC 2018. User may define the target spectrum or
-        use the code spectrum directly by inserting site parameters.
-        
-        Rule 1: Mean of selected records should remain above the lower bound target spectra.
-            For selection = 1: Sa_rec = (Sa_1 or Sa_2) - lower bound = 1.0 * SaTarget(0.2Tp-1.5Tp) 
-            For Selection = 2: Sa_rec = (Sa_1**2+Sa_2**2)**0.5 - lower bound = 1.3 * SaTarget(0.2Tp-1.5Tp) 
-
-        Rule 2: 
-            No more than 3 records can be selected from the same event! In other words,
-            rec_eqID cannot be the same for more than 3 of the selected records.      
-
-        Rule 3: 
-            At least 11 records (or pairs) must be selected.
-
-        Parameters
-        ----------
         target_path = str, optional, the default is None.
             Path for used defined target spectrum.
-        Lat: float, optional, the default is 41.0582.
-            Site latitude
-        Long: float, optional, the default is 29.00951.
-            Site longitude
-        DD:  int, optional, the default is 2.
-            Earthquake ground motion intensity level (1,2,3,4)
-        Soil: str, optional, the default is 'ZC'.
-            Site soil class
         nGM : int, optional, the default is 11.
             Number of records to be selected. 
         selection : int, optional, the default is 1.
             Number of ground motion components to select. 
-        Tp : float, optional, the default is 1.
-            Predominant period of the structure. 
         Mw_lim : list, optional, the default is None.
             The limiting values on magnitude. 
         Vs30_lim : list, optional, the default is None.
@@ -2590,6 +1949,149 @@ class tbec_2018(utility):
             Maximum allowed scaling factor, used with opt=2 case.
         weights = list, optional, the default is [1,1].
             Error weights (mean,std), used with opt=2 case.
+        RecPerEvent: int, the default is 3.
+            The limit for the maximum number of records belong to the same event
+
+        Returns
+        -------
+        None.
+        """
+
+        # Add the input the ground motion database to use
+        matfile = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Meta_Data', database)
+        self.database = loadmat(matfile, squeeze_me=True)
+
+        # create the output directory and add the path to self
+        cwd = os.getcwd()
+        outdir_path = os.path.join(cwd, outdir)
+        create_dir(outdir_path)
+
+        # Add selection settings to self
+        self.database['Name'] = database
+        self.outdir = outdir_path
+        self.nGM = nGM
+        self.selection = selection
+        self.Mw_lim = Mw_lim
+        self.Vs30_lim = Vs30_lim
+        self.Rjb_lim = Rjb_lim
+        self.fault_lim = fault_lim
+        self.opt = opt
+        self.maxScale = maxScale
+        self.weights = np.array(weights, dtype=float)
+        self.target_path = target_path
+        self.RecPerEvent = RecPerEvent
+
+    @staticmethod
+    @njit
+    def _opt1(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, nBig, eq_ID, sampleBig, RecPerEvent):
+        # Optimize based on scaling factor
+        def mean_numba(a):
+
+            res = []
+            for i in range(a.shape[1]):
+                res.append(a[:, i].mean())
+
+            return np.array(res)
+
+        for j in range(nBig):
+            tmp = eq_ID[j]
+            # record should not be repeated and number of eqs from the same event should not exceed 3
+            if not np.any(recIDs == j) and np.sum(eqIDs == tmp) < RecPerEvent:
+                # Add to the sample the scaled spectra
+                temp = np.zeros((1, len(sampleBig[j, :])))
+                temp[:, :] = sampleBig[j, :]  # get the trial spectra
+                tempSample = np.concatenate((sampleSmall, temp), axis=0)  # add the trial spectra to subset list
+                tempScale = np.max(target_spec / mean_numba(tempSample))  # compute new scaling factor
+
+                # Should cause improvement
+                if abs(tempScale - 1) <= abs(scaleFac - 1):
+                    minID = j
+                    scaleFac = tempScale
+
+        return minID, scaleFac
+
+    @staticmethod
+    @njit
+    def _opt2(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, DevTot, nBig, eq_ID, sampleBig, weights, maxScale, RecPerEvent):
+        # Optimize based on dispersion
+        def mean_numba(a):
+
+            res = []
+            for i in range(a.shape[1]):
+                res.append(a[:, i].mean())
+
+            return np.array(res)
+
+        def std_numba(a):
+
+            res = []
+            for i in range(a.shape[1]):
+                res.append(a[:, i].std())
+
+            return np.array(res)
+
+        for j in range(nBig):
+            tmp = eq_ID[j]
+
+            # record should not be repeated and number of eqs from the same event should not exceed 3
+            if not np.any(recIDs == j) and np.sum(eqIDs == tmp) < RecPerEvent:
+                # Add to the sample the scaled spectra
+                temp = np.zeros((1, len(sampleBig[j, :])))
+                temp[:, :] = sampleBig[j, :]  # get the trial spectra
+                tempSample = np.concatenate((sampleSmall, temp), axis=0)  # add the trial spectra to subset list
+                tempScale = np.max(target_spec / mean_numba(tempSample))  # compute new scaling factor
+                tempSig = std_numba(tempSample * tempScale)  # Compute standard deviation
+                tempMean = mean_numba(tempSample * tempScale)  # Compute mean
+                devSig = np.max(tempSig)  # Compute maximum standard deviation
+                devMean = np.max(np.abs(target_spec - tempMean))  # Compute maximum difference in mean
+                tempDevTot = devMean * weights[0] + devSig * weights[1]
+
+                # Should cause improvement
+                if maxScale > tempScale > 1 / maxScale and tempDevTot <= DevTot:
+                    minID = j
+                    scaleFac = tempScale
+                    DevTot = tempDevTot
+
+        return minID, scaleFac
+
+    def tbec2018(self, Lat=41.0582, Long=29.00951, DD=2, SiteClass='ZC', Tp=1):
+        """
+        Details
+        -------
+        Selects the suitable ground motion set in accordance with TBEC 2018. 
+        If user did not define any target spectrum, the design spectrum defined by the code is going to be used. 
+        The latter requires the definition of site parameters
+
+
+        References
+        ----------
+        TBEC. (2018). Turkish building earthquake code.
+
+        Notes
+        -----
+        Rule 1: Mean of selected records should remain above the lower bound target spectra.
+            For selection = 1: Sa_rec = (Sa_1 or Sa_2) - lower bound = 1.0 * SaTarget(0.2Tp-1.5Tp) 
+            For Selection = 2: Sa_rec = (Sa_1**2+Sa_2**2)**0.5 - lower bound = 1.3 * SaTarget(0.2Tp-1.5Tp) 
+
+        Rule 2: 
+            No more than 3 records can be selected from the same event! In other words,
+            rec_eqID cannot be the same for more than 3 of the selected records.      
+
+        Rule 3: 
+            At least 11 records (or pairs) must be selected.
+
+        Parameters
+        ----------
+        Lat: float, optional, the default is 41.0582.
+            Site latitude
+        Long: float, optional, the default is 29.00951.
+            Site longitude
+        DD:  int, optional, the default is 2.
+            Earthquake ground motion intensity level (1,2,3,4)
+        SiteClass: str, optional, the default is 'ZC'.
+            Site soil class ('ZA','ZB','ZC','ZD','ZE')
+        Tp : float, optional, the default is 1.
+            Predominant period of the structure. 
         
         Returns
         -------
@@ -2597,47 +2099,49 @@ class tbec_2018(utility):
         """
 
         # Add selection settings to self
-        self.nGM = nGM
-        self.selection = selection
-        self.Mw_lim = Mw_lim
-        self.Vs30_lim = Vs30_lim
-        self.Rjb_lim = Rjb_lim
-        self.fault_lim = fault_lim
-        self.Tp = Tp
         self.Lat = Lat
         self.Long = Long
         self.DD = DD
-        self.Soil = Soil
+        self.SiteClass = SiteClass
+        self.Tp = Tp
+        self.code = 'TBEC 2018'
 
-        # Exsim provides a single gm component
-        if self.database['Name'].startswith("EXSIM"):
-            print('Warning! Selection = 1 for this database')
-            self.selection = 1
+        if self.nGM < 11:
+            print('Warning! nGM must be at least 11 according to TBEC 2018. Changing...')
+            self.nGM = 11
 
-        # convert to array with floats
-        weights = np.array(weights, dtype=float)
+        if self.RecPerEvent < 3:
+            print('Warning! Limit for Record Per Event must be at least 3 according to TBEC 2018. Changing...')
+            self.RecPerEvent = 3
+        
+        # Set the period range
+        self.Tlower = 0.2 * Tp
+        self.Tupper = 1.5 * Tp
 
         # Match periods (known periods and periods for error computations)
         perKnown = self.database['Periods']
-        self.T = perKnown[(perKnown >= 0.2 * self.Tp) * (perKnown <= 1.5 * self.Tp)]
+        self.T = perKnown[(perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
 
-        # Use the specified target spectrum
-        if target_path:
-            data = np.loadtxt(target_path)
-            func = interpolate.interp1d(data[:,0],data[:,1], kind='linear', fill_value='extrapolate')
-            target_spec = func(self.T)
+        # Determine the elastic design spectrum from the user-defined spectrum
+        if self.target_path:
+            data = np.loadtxt(self.target_path)
+            intfunc = interpolate.interp1d(data[:,0],data[:,1], kind='linear', fill_value='extrapolate')
+            target_spec = intfunc(self.T)
 
-        # Determine the lower bound spectra from code
+        # Determine the elastic design spectrum from code
         else:
-            target_spec = self.get_Sae_tbec2018(self.T, Lat, Long, DD, Soil)
-            if self.selection == 1:
-                target_spec = 1.0 * target_spec
-            elif self.selection == 2:
-                target_spec = 1.3 * target_spec
-                self.Sa_def = 'SRSS'
+            PGA, SDS, SD1, TL = SiteParam_tbec2018(Lat, Long, DD, SiteClass)
+            target_spec = Sae_tbec2018(self.T, PGA, SDS, SD1, TL)
+            
+        # Consider the lower bound spectrum specified by the code as target spectrum
+        if self.selection == 1:
+            target_spec = 1.0 * target_spec
+        elif self.selection == 2:
+            target_spec = 1.3 * target_spec
+            self.Sa_def = 'SRSS'
 
         # Search the database and filter
-        sampleBig, Vs30, Mw, Rjb, fault, Filename_1, Filename_2, NGA_num, eq_ID_, station_code = self.search_database()
+        sampleBig, Vs30, Mw, Rjb, fault, Filename_1, Filename_2, NGA_num, eq_ID_, station_code = self._search_database()
 
         # Sample size of the filtered database
         nBig = sampleBig.shape[0]
@@ -2663,110 +2167,29 @@ class tbec_2018(utility):
             tmp2 = eq_ID[tmp1]
             recIDs[idx1] = tmp1
             eqIDs[idx1] = tmp2
-            if np.sum(eqIDs == tmp2) <= 3:
+            if np.sum(eqIDs == tmp2) <= self.RecPerEvent:
                 idx1 += 1
 
         # Initial selection results - based on MSE
         sampleSmall = sampleBig[recIDs.tolist(), :]
         scaleFac = np.max(target_spec / sampleSmall.mean(axis=0))
 
-        @njit
-        def opt_method1(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID):
-            # Optimize based on scaling factor
-            def mean_numba(a):
-
-                res = []
-                for i in range(a.shape[1]):
-                    res.append(a[:, i].mean())
-
-                return np.array(res)
-
-            def std_numba(a):
-
-                res = []
-                for i in range(a.shape[1]):
-                    res.append(a[:, i].std())
-
-                return np.array(res)
-
-            for j in range(nBig):
-                tmp = eq_ID[j]
-                # record should not be repeated and number of eqs from the same event should not exceed 3
-                if not np.any(recIDs == j) and np.sum(eqIDs == tmp) <= 2:
-                    # Add to the sample the scaled spectra
-                    temp = np.zeros((1, len(sampleBig[j, :])))
-                    temp[:, :] = sampleBig[j, :]  # get the trial spectra
-                    tempSample = np.concatenate((sampleSmall, temp), axis=0)  # add the trial spectra to subset list
-                    tempScale = np.max(target_spec / mean_numba(tempSample))  # compute new scaling factor
-
-                    # Should cause improvement
-                    if abs(tempScale - 1) <= abs(scaleFac - 1):
-                        minID = j
-                        scaleFac = tempScale
-
-            return minID, scaleFac
-
-        @njit
-        def opt_method2(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, DevTot):
-            # Optimize based on dispersion
-            def mean_numba(a):
-
-                res = []
-                for i in range(a.shape[1]):
-                    res.append(a[:, i].mean())
-
-                return np.array(res)
-
-            def std_numba(a):
-
-                res = []
-                for i in range(a.shape[1]):
-                    res.append(a[:, i].std())
-
-                return np.array(res)
-
-            for j in range(nBig):
-                tmp = eq_ID[j]
-
-                # record should not be repeated and number of eqs from the same event should not exceed 3
-                if not np.any(recIDs == j) and np.sum(eqIDs == tmp) <= 2:
-                    # Add to the sample the scaled spectra
-                    temp = np.zeros((1, len(sampleBig[j, :])))
-                    temp[:, :] = sampleBig[j, :]  # get the trial spectra
-                    tempSample = np.concatenate((sampleSmall, temp), axis=0)  # add the trial spectra to subset list
-                    tempScale = np.max(target_spec / mean_numba(tempSample))  # compute new scaling factor
-                    tempSig = std_numba(tempSample * tempScale)  # Compute standard deviation
-                    tempMean = mean_numba(tempSample * tempScale)  # Compute mean
-                    devSig = np.max(tempSig)  # Compute maximum standard deviation
-                    devMean = np.max(np.abs(target_spec - tempMean))  # Compute maximum difference in mean
-                    tempDevTot = devMean * weights[0] + devSig * weights[1]
-
-                    # Should cause improvement
-                    if maxScale > tempScale > 1 / maxScale and tempDevTot <= DevTot:
-                        minID = j
-                        scaleFac = tempScale
-                        DevTot = tempDevTot
-
-            return minID, scaleFac
-
-        # Apply Greedy subset modification procedure to improve selection
-        # Use njit to speed up the optimization algorithm
-        if opt != 0:
+        # Apply optimization procedures
+        if self.opt != 0:
             for i in range(self.nGM):  # Loop for nGM
                 minID = recIDs[i]
                 devSig = np.max(np.std(sampleSmall * scaleFac, axis=0))  # Compute standard deviation
                 devMean = np.max(np.abs(target_spec - np.mean(sampleSmall, axis=0)) * scaleFac)
-                DevTot = devMean * weights[0] + devSig * weights[1]
+                DevTot = devMean * self.weights[0] + devSig * self.weights[1]
                 sampleSmall = np.delete(sampleSmall, i, 0)
                 recIDs = np.delete(recIDs, i)
                 eqIDs = np.delete(eqIDs, i)
 
                 # Try to add a new spectra to the subset list
-                if opt == 1:  # try to optimize scaling factor only (closest to 1)
-                    minID, scaleFac = opt_method1(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID)
-                if opt == 2:  # try to optimize the error (max(mean-target) + max(std))
-                    minID, scaleFac = opt_method2(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, DevTot)
-
+                if self.opt == 1:  # try to optimize scaling factor only (closest to 1)
+                    minID, scaleFac = self._opt1(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, nBig, eq_ID, sampleBig, self.RecPerEvent)
+                if self.opt == 2:  # try to optimize the error (max(mean-target) + max(std))
+                    minID, scaleFac = self._opt2(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, DevTot, nBig, eq_ID, sampleBig, self.weights, self.maxScale, self.RecPerEvent)
                 # Add new element in the right slot
                 sampleSmall = np.concatenate(
                     (sampleSmall[:i, :], sampleBig[minID, :].reshape(1, sampleBig.shape[1]), sampleSmall[i:, :]),
@@ -2795,12 +2218,8 @@ class tbec_2018(utility):
 
         rec_idxs = []
         if self.selection == 1:
-            if self.database['Name'].startswith("EXSIM"):
-                SaKnown = self.database['Sa_1']
-                Filename_1 = self.database['Filename_1']
-            else:
-                SaKnown = np.append(self.database['Sa_1'], self.database['Sa_2'], axis=0)
-                Filename_1 = np.append(self.database['Filename_1'], self.database['Filename_2'], axis=0)
+            SaKnown = np.append(self.database['Sa_1'], self.database['Sa_2'], axis=0)
+            Filename_1 = np.append(self.database['Filename_1'], self.database['Filename_2'], axis=0)
             for rec in self.rec_h1:
                 rec_idxs.append(np.where(Filename_1 == rec)[0][0])
             rec_spec = SaKnown[rec_idxs, :]
@@ -2815,362 +2234,344 @@ class tbec_2018(utility):
         self.rec_spec = rec_spec
         self.T = self.database['Periods']
 
-        if target_path:
-            self.target = func(self.T)
-        elif self.selection == 1:
-            self.target = self.get_Sae_tbec2018(self.T, Lat, Long, DD, Soil)
-        elif self.selection == 2:
-            self.target = self.get_Sae_tbec2018(self.T, Lat, Long, DD, Soil) * 1.3
+        if self.target_path:
+            self.target = intfunc(self.T)
+        else:
+            self.target = Sae_tbec2018(self.T, PGA, SDS, SD1, TL)
 
         print('Ground motion selection is finished scaling factor is %.3f' % self.rec_scale)
 
-
-class ec8_part1(utility):
-    """
-    This class is used to
-        1) Create target spectrum based on EC8 - Part 1
-        2) Selecting and scaling suitable ground motion sets for target spectrum in accordance with EC8 - Part 1
-            - Currently, only supports the record selection from NGA_W2 record database
-    """
-
-    def __init__(self, database='NGA_W2', outdir='Outputs'):
+    def asce7_16(self, Lat=34, Long=-118, RiskCat='II', SiteClass='C', T1_small=1, T1_big=1, Tlower = None, Tupper = None):
         """
         Details
         -------
-        Loads the record database to use
+        Selects the suitable ground motion set in accordance with ASCE 7-16. 
+        If user did not define any target spectrum, the MCE_R response spectrum defined by the code is going to be used. 
+        The latter requires the definition of site parameters.
 
-        Parameters
-        ----------
-        database : str, optional
-            Database to use: NGA_W2, ESM_2018, EXSIM_Duzce
-            The default is NGA_W2.
-        outdir : str, optional
-            output directory
-            The default is 'Outputs'
 
-        Returns
-        -------
-        None.
-        """
-
-        # Add the input the ground motion database to use
-        matfile = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Meta_Data', database)
-        self.database = loadmat(matfile, squeeze_me=True)
-        self.database['Name'] = database
-        # create the output directory and add the path to self
-        cwd = os.getcwd()
-        outdir_path = os.path.join(cwd, outdir)
-        self.outdir = outdir_path
-        self.create_dir(self.outdir)
-
-    @staticmethod
-    def get_Sae_EC8(ag, xi, T, I, Type, Soil):
-        """
-        Details
-        -------
-        Get the elastic response spectrum for EN 1998-1:2004
-    
-        Notes
-        -----
-        Requires get_EC804_spectrum_props
-    
         References
         ----------
-        CEN. Eurocode 8: Design of Structures for Earthquake Resistance -
-        Part 1: General Rules, Seismic Actions and Rules for Buildings
-        (EN 1998-1:2004). Brussels, Belgium: 2004.
-    
-        Parameters
-        ----------
-        ag: float
-            Peak ground acceleration
-        xi: float
-            Damping ratio
-        T: list or numpy.array
-            Period array to get Sa values
-        I: int or float
-            Importance factor
-        Type: str
-            Type of spectrum (Option: 'Type1' or 'Type2')
-        Soil: str
-            Soil Class (Options: 'A', 'B', 'C', 'D' or 'E')
-    
-        Returns
-        -------
-        Sae: numpy.array
-            Elastic acceleration response spectrum
-    
-        """
-        SpecProp = {
-            'Type1': {
-                'A': {'S': 1.00, 'Tb': 0.15, 'Tc': 0.4, 'Td': 2.0},
-                'B': {'S': 1.20, 'Tb': 0.15, 'Tc': 0.5, 'Td': 2.0},
-                'C': {'S': 1.15, 'Tb': 0.20, 'Tc': 0.6, 'Td': 2.0},
-                'D': {'S': 1.35, 'Tb': 0.20, 'Tc': 0.8, 'Td': 2.0},
-                'E': {'S': 1.40, 'Tb': 0.15, 'Tc': 0.5, 'Td': 2.0},
-            },
+        American Society of Civil Engineers. (2017, June). Minimum design loads and associated criteria 
+        for buildings and other structures. American Society of Civil Engineers.
 
-            'Type2': {
-                'A': {'S': 1.00, 'Tb': 0.05, 'Tc': 0.25, 'Td': 1.2},
-                'B': {'S': 1.35, 'Tb': 0.05, 'Tc': 0.25, 'Td': 1.2},
-                'C': {'S': 1.50, 'Tb': 0.10, 'Tc': 0.25, 'Td': 1.2},
-                'D': {'S': 1.80, 'Tb': 0.10, 'Tc': 0.30, 'Td': 1.2},
-                'E': {'S': 1.60, 'Tb': 0.05, 'Tc': 0.25, 'Td': 1.2},
-            }
-        }
-
-        S = SpecProp[Type][Soil]['S']
-        Tb = SpecProp[Type][Soil]['Tb']
-        Tc = SpecProp[Type][Soil]['Tc']
-        Td = SpecProp[Type][Soil]['Td']
-
-        eta = max(np.sqrt(0.10 / (0.05 + xi)), 0.55)
-
-        ag = ag * I
-
-        Sae = []
-        for i in range(len(T)):
-            if T[i] >= 0 and T[i] <= Tb:
-                Sa_el = ag * S * (1.0 + T[i] / Tb * (2.5 * eta - 1.0))
-            elif T[i] >= Tb and T[i] <= Tc:
-                Sa_el = ag * S * 2.5 * eta
-            elif T[i] >= Tc and T[i] <= Td:
-                Sa_el = ag * S * 2.5 * eta * (Tc / T[i])
-            elif T[i] >= Td:
-                Sa_el = ag * S * 2.5 * eta * (Tc * Td / T[i] / T[i])
-            else:
-                print('Error! Cannot compute a value of Sa_el')
-
-            Sae.append(Sa_el)
-
-        Sae = np.array(Sae)
-
-        return Sae
-
-    def select(self, target_path=None, ag=0.2, xi=0.05, I=1.0, Type='Type1', Soil='A', nGM=3, selection=1, Tp=1,
-               Mw_lim=None, Vs30_lim=None, Rjb_lim=None, fault_lim=None, opt=1,
-               maxScale=2, weights=[1, 1]):
-        """
-        Details
-        -------
-        Select the suitable ground motion set in accordance with EC8 - PART 1.
-        User may define the target spectrum or
-        use the code spectrum directly by inserting site parameters.
-        
-        Mean of selected records should remain above the lower bound target spectra.
-            For selection = 1: Sa_rec = (Sa_1 or Sa_2) - lower bound = 0.9 * SaTarget(0.2Tp-2.0Tp)
-            For Selection = 2: Sa_rec = (Sa_1+Sa_2)*0.5 - lower bound = 0.9 * SaTarget(0.2Tp-2.0Tp)
-            PGA_record > PGA_target
-
-            Note: Here we assume SA(T[0])=PGA, where T[0] is 0.01 for both databases.
-            Not a bad assumption since it is very close to PGA.
+        Notes
+        -----
+        Rule 1: Mean of selected records should remain above the lower bound target spectra.
+            For selection = 1: Sa_rec = (Sa_1 or Sa_2) - lower bound = 0.9 * Sa_MCEr(Tlower-Tupper) 
+            For Selection = 2: Sa_rec = RotD100 - lower bound = 0.9 * Sa_MCEr(Tlower-Tupper)     
+            Tlower >= 0.2 * T1_small
+            Tupper >= 1.5 * T1_big
             
+        Rule 2: 
+            At least 11 records (or pairs) must be selected.
+
         Parameters
         ----------
-        target_path = str, optional, the default is None.
-            Path for used defined target spectrum.
-        ag:  float, optional, the default is 0.25.
-            Peak ground acceleration [g]
-        xi: float, optional, the default is 0.05.
-            Damping
-        I:  float, optional, the default is 1.2.
-            importance factor
-        Type: str, optional, the default is 'Type1'
-            Type of spectrum (Option: 'Type1' or 'Type2')
-        Soil: str, optional, the default is 'B'
-            Soil Class (Options: 'A', 'B', 'C', 'D' or 'E')
-        nGM : int, optional, the default is 11.
-            Number of records to be selected. 
-        selection : int, optional, the default is 1.
-            Number of ground motion components to select. 
-        Tp : float, optional, the default is 1.
-            Predominant period of the structure. 
-        Mw_lim : list, optional, the default is None.
-            The limiting values on magnitude. 
-        Vs30_lim : list, optional, the default is None.
-            The limiting values on Vs30. 
-        Rjb_lim : list, optional, the default is None.
-            The limiting values on Rjb. 
-        fault_lim : list, optional, the default is None.
-            The limiting fault mechanisms.
-            For NGA_W2 database:
-                0 for unspecified fault
-                1 for strike-slip fault
-                2 for normal fault
-                3 for reverse fault
-            For ESM_2018 database:
-                'NF' for normal faulting
-                'NS' for predominately normal with strike-slip component
-                'O' for oblique
-                'SS' for strike-slip faulting
-                'TF' for thrust faulting
-                'TS' for predominately thrust with strike-slip component
-                'U' for unknown
-        opt : int, optional, the default is 1.
-            If equal to 0, the record set is selected using
-            method of “least squares”.
-            If equal to 1, the record set selected such that 
-            scaling factor is closer to 1.
-            If equal to 2, the record set selected such that 
-            both scaling factor and standard deviation is lowered.
-        maxScale : float, optional, the default is 2.
-            Maximum allowed scaling factor, used with opt=2 case.
-        weights = list, optional, the default is [1,1].
-            Error weights (mean,std), used with opt=2 case.
-
+        Lat: float, optional, the default is 41.0582.
+            Site latitude
+        Long: float, optional, the default is 29.00951.
+            Site longitude
+        RiskCat:  str, the default is 'III'
+            Risk category for structure ('I','II','III','IV')
+        SiteClass: str, optional, the default is 'C'.
+            Site soil class ('A','B','C','D','E')
+        T1_small: float, the default is 1.
+            The smallest of first-mode periods in principal horizontal directions
+        T1_big: float, the default is 1.
+            The largest of first-mode periods in principal horizontal directions        
+        Tlower: float, the default is None.
+            The lower bound for period range, if None equal to 0.2*T1_small
+        Tupper: float, the default is None.
+            The upper bound for period range, if None equal to 2.0*T1_big
+        
         Returns
         -------
         None.
         """
 
         # Add selection settings to self
-        self.nGM = nGM
-        self.selection = selection
-        self.Mw_lim = Mw_lim
-        self.Vs30_lim = Vs30_lim
-        self.Rjb_lim = Rjb_lim
-        self.fault_lim = fault_lim
-        self.Tp = Tp
-        self.ag = ag
-        self.I = I
-        self.Type = Type
-        self.Soil = Soil
+        self.Lat = Lat
+        self.Long = Long
+        self.RiskCat = RiskCat
+        self.SiteClass = SiteClass
+        self.code = 'ASCE 7-16'
+        
+        # Section 16.2.3.1
+        if not Tlower:
+            Tlower = 0.2 * T1_small
+        elif Tlower < 0.2 * T1_small:
+            Tlower = 0.2 * T1_small
+            print('Warning! Lower bound cannot be lower than 0.2 times the largest first-mode period according to ASCE 7-16. Changing...')
+        if not Tupper:
+            Tupper = 2.0 * T1_big
+        elif Tupper < 1.5 * T1_big:
+            Tupper = 1.5 * T1_big
+            print('Warning! Upper bound cannot be lower than 1.5 times the smallest first-mode period according to ASCE 7-16. Changing...')
+        self.Tlower = Tlower
+        self.Tupper = Tupper
 
-        # Exsim provides a single gm component
-        if self.database['Name'].startswith("EXSIM"):
-            print('Warning! Selection = 1 for this database')
-            self.selection = 1
-
-        # convert to array with floats
-        weights = np.array(weights, dtype=float)
+        # Section 16.2.2
+        if self.nGM < 11:
+            print('Warning! nGM must be at least 11 according to ASCE 7-16. Changing...')
+            self.nGM = 11
 
         # Match periods (known periods and periods for error computations)
-        # Add Sa(T=0) or PGA, approximated as Sa(T=0.01)
-        self.T = np.append(self.database['Periods'][0], self.database['Periods'][
-            (self.database['Periods'] >= 0.2 * self.Tp) * (self.database['Periods'] <= 2.0 * self.Tp)])
+        perKnown = self.database['Periods']
+        self.T = perKnown[(perKnown >= self.Tlower) * (perKnown <= Tupper)]
 
-        # Use the specified target spectrum
-        if target_path:
-            data = np.loadtxt(target_path)
-            func = interpolate.interp1d(data[:,0],data[:,1], kind='linear', fill_value='extrapolate')
-            target_spec = func(self.T)
+        # Determine the elastic design spectrum from the user-defined spectrum
+        if self.target_path:
+            data = np.loadtxt(self.target_path)
+            intfunc = interpolate.interp1d(data[:,0],data[:,1], kind='linear', fill_value='extrapolate')
+            target_spec = intfunc(self.T)
 
-        # Determine the lower bound spectra from code
+        # Determine the elastic design spectrum from code, Section 16.2.1
         else:
-            # Determine the lower bound spectra
-            target_spec = self.get_Sae_EC8(ag, xi, self.T, I, Type, Soil)
-        target_spec[1:] = 0.9 * target_spec[1:]  # lower bound spectra except PGA
-
+            SDS, SD1, TL = SiteParam_asce7_16(Lat, Long, RiskCat, SiteClass) # Retrieve site parameters
+            target_spec = 1.5*Sae_asce7_16(self.T, SDS, SD1, TL) # Retrive the design spectrum and multiply by 1.5 to get MCER
+        
+        # Consider the lower bound spectrum specified by the code as target spectrum, Section 16.2.3.2
+        target_spec = 0.9 * target_spec
         if self.selection == 2:
-            self.Sa_def = 'ArithmeticMean'
+            self.Sa_def = 'RotD100'                
 
         # Search the database and filter
-        sampleBig, Vs30, Mw, Rjb, fault, Filename_1, Filename_2, NGA_num, eq_ID, station_code = self.search_database()
+        sampleBig, Vs30, Mw, Rjb, fault, Filename_1, Filename_2, NGA_num, eq_ID_, station_code = self._search_database()
 
         # Sample size of the filtered database
         nBig = sampleBig.shape[0]
 
         # Find best matches to the target spectrum from ground-motion database
-        mse = ((np.matlib.repmat(target_spec, nBig, 1) - sampleBig) ** 2).mean(axis=1)
+        temp = (np.matlib.repmat(target_spec, nBig, 1) - sampleBig) ** 2
+        mse = temp.mean(axis=1)
+
+        if self.database['Name'].startswith('ESM'):
+            d = {ni: indi for indi, ni in enumerate(set(eq_ID_.tolist()))}
+            eq_ID = np.asarray([d[ni] for ni in eq_ID_.tolist()])
+        else:
+            eq_ID = eq_ID_.copy()
+
         recID_sorted = np.argsort(mse)
-        recIDs = recID_sorted[:self.nGM]
+        recIDs = np.ones(self.nGM, dtype=int) * (-1)
+        eqIDs = np.ones(self.nGM, dtype=int) * (-1)
+        idx1 = 0
+        idx2 = 0
+        while idx1 < self.nGM:  # not more than 3 of the records should be from the same event
+            tmp1 = recID_sorted[idx2]
+            idx2 += 1
+            tmp2 = eq_ID[tmp1]
+            recIDs[idx1] = tmp1
+            eqIDs[idx1] = tmp2
+            if np.sum(eqIDs == tmp2) <= self.RecPerEvent:
+                idx1 += 1
 
         # Initial selection results - based on MSE
         sampleSmall = sampleBig[recIDs.tolist(), :]
         scaleFac = np.max(target_spec / sampleSmall.mean(axis=0))
 
-        # Apply Greedy subset modification procedure to improve selection
-        # Use njit to speed up the optimization algorithm
-        @njit
-        def opt_method1(sampleSmall, scaleFac, target_spec, recIDs, minID):
-
-            def mean_numba(a):
-
-                res = []
-                for i in range(a.shape[1]):
-                    res.append(a[:, i].mean())
-
-                return np.array(res)
-
-            for j in range(nBig):
-                if not np.any(recIDs == j):
-                    # Add to the sample the scaled spectra
-                    temp = np.zeros((1, len(sampleBig[j, :])));
-                    temp[:, :] = sampleBig[j, :]  # get the trial spectra
-                    tempSample = np.concatenate((sampleSmall, temp), axis=0)  # add the trial spectra to subset list
-                    tempScale = np.max(target_spec / mean_numba(tempSample))  # compute new scaling factor
-
-                    # Should cause improvement and record should not be repeated
-                    if abs(tempScale - 1) <= abs(scaleFac - 1):
-                        minID = j
-                        scaleFac = tempScale
-
-            return minID, scaleFac
-
-        @njit
-        def opt_method2(sampleSmall, scaleFac, target_spec, recIDs, minID, DevTot):
-            # Optimize based on dispersion
-            def mean_numba(a):
-
-                res = []
-                for i in range(a.shape[1]):
-                    res.append(a[:, i].mean())
-
-                return np.array(res)
-
-            def std_numba(a):
-
-                res = []
-                for i in range(a.shape[1]):
-                    res.append(a[:, i].std())
-
-                return np.array(res)
-
-            for j in range(nBig):
-
-                # record should not be repeated
-                if not np.any(recIDs == j):
-                    # Add to the sample the scaled spectra
-                    temp = np.zeros((1, len(sampleBig[j, :])));
-                    temp[:, :] = sampleBig[j, :]  # get the trial spectra
-                    tempSample = np.concatenate((sampleSmall, temp), axis=0)  # add the trial spectra to subset list
-                    tempScale = np.max(target_spec / mean_numba(tempSample))  # compute new scaling factor
-                    tempSig = std_numba(tempSample * tempScale)  # Compute standard deviation
-                    tempMean = mean_numba(tempSample * tempScale)  # Compute mean
-                    devSig = np.max(tempSig)  # Compute maximum standard deviation
-                    devMean = np.max(np.abs(target_spec - tempMean))  # Compute maximum difference in mean
-                    tempDevTot = devMean * weights[0] + devSig * weights[1]
-
-                    # Should cause improvement
-                    if tempScale < maxScale and tempScale > 1 / maxScale and tempDevTot <= DevTot:
-                        minID = j
-                        scaleFac = tempScale
-                        DevTot = tempDevTot
-
-            return minID, scaleFac
-
-        # Apply Greedy subset modification procedure to improve selection
-        # Use njit to speed up the optimization algorithm
-        if opt != 0:
+        # Apply optimization procedures
+        if self.opt != 0:
             for i in range(self.nGM):  # Loop for nGM
                 minID = recIDs[i]
                 devSig = np.max(np.std(sampleSmall * scaleFac, axis=0))  # Compute standard deviation
                 devMean = np.max(np.abs(target_spec - np.mean(sampleSmall, axis=0)) * scaleFac)
-                DevTot = devMean * weights[0] + devSig * weights[1]
+                DevTot = devMean * self.weights[0] + devSig * self.weights[1]
                 sampleSmall = np.delete(sampleSmall, i, 0)
                 recIDs = np.delete(recIDs, i)
+                eqIDs = np.delete(eqIDs, i)
 
                 # Try to add a new spectra to the subset list
-                if opt == 1:  # try to optimize scaling factor only (closest to 1)
-                    minID, scaleFac = opt_method1(sampleSmall, scaleFac, target_spec, recIDs, minID)
-                if opt == 2:  # try to optimize the error (max(mean-target) + max(std))
-                    minID, scaleFac = opt_method2(sampleSmall, scaleFac, target_spec, recIDs, minID, DevTot)
-
+                if self.opt == 1:  # try to optimize scaling factor only (closest to 1)
+                    minID, scaleFac = self._opt1(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, nBig, eq_ID, sampleBig, self.RecPerEvent)
+                if self.opt == 2:  # try to optimize the error (max(mean-target) + max(std))
+                    minID, scaleFac = self._opt2(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, DevTot, nBig, eq_ID, sampleBig, self.weights, self.maxScale, self.RecPerEvent)
                 # Add new element in the right slot
                 sampleSmall = np.concatenate(
                     (sampleSmall[:i, :], sampleBig[minID, :].reshape(1, sampleBig.shape[1]), sampleSmall[i:, :]),
                     axis=0)
                 recIDs = np.concatenate((recIDs[:i], np.array([minID]), recIDs[i:]))
+                eqIDs = np.concatenate((eqIDs[:i], np.array([eq_ID[minID]]), eqIDs[i:]))
+
+        recIDs = recIDs.tolist()
+        # Add selected record information to self
+        self.rec_scale = float(scaleFac)
+        self.rec_Vs30 = Vs30[recIDs]
+        self.rec_Rjb = Rjb[recIDs]
+        self.rec_Mw = Mw[recIDs]
+        self.rec_fault = fault[recIDs]
+        self.rec_eqID = eq_ID_[recIDs]
+        self.rec_h1 = Filename_1[recIDs]
+
+        if self.selection == 2:
+            self.rec_h2 = Filename_2[recIDs]
+
+        if self.database['Name'] == 'NGA_W2':
+            self.rec_rsn = NGA_num[recIDs]
+
+        if self.database['Name'] == 'ESM_2018':
+            self.rec_station_code = station_code[recIDs]
+
+        rec_idxs = []
+        if self.selection == 1:
+            SaKnown = np.append(self.database['Sa_1'], self.database['Sa_2'], axis=0)
+            Filename_1 = np.append(self.database['Filename_1'], self.database['Filename_2'], axis=0)
+            for rec in self.rec_h1:
+                rec_idxs.append(np.where(Filename_1 == rec)[0][0])
+            rec_spec = SaKnown[rec_idxs, :]
+        elif self.selection == 2:
+            for rec in self.rec_h1:
+                rec_idxs.append(np.where(self.database['Filename_1'] == rec)[0][0])
+            rec_spec = self.database['Sa_RotD100'][rec_idxs, :]
+
+        # Save the results for whole spectral range
+        self.rec_spec = rec_spec
+        self.T = self.database['Periods']
+
+        if self.target_path:
+            self.target = intfunc(self.T)
+        else:
+            self.target = 1.5*Sae_asce7_16(self.T, SDS, SD1, TL)
+
+        print('Ground motion selection is finished scaling factor is %.3f' % self.rec_scale)
+
+    def ec8_part1(self, ag=0.2, xi=0.05, ImpClass='II', Type='Type1', SiteClass='C', Tp=1):
+        """
+        Details
+        -------
+        Select the suitable ground motion set in accordance with EC8 - PART 1.
+        If user did not define any target spectrum, the design spectrum defined by the code is going to be used. 
+        The latter requires the definition of site parameters
+
+        References
+        ----------
+        CEN. Eurocode 8: Design of Structures for Earthquake Resistance -  Part 1: General Rules, Seismic Actions and Rules 
+        for Buildings (EN 1998-1:2004). Brussels, Belgium: 2004.
+
+        Notes
+        -----
+        Section 3.2.3.1.
+        
+        Rule 1 (a): 
+            At least 3 records (or pairs) must be selected.
+
+        Rule 2 (b): 
+            mean(PGA_rec) >= PGA_target
+            Here we assume SA(T[0])=PGA, where T[0] is 0.01 for both record databases.
+            Not a bad assumption since it is very close to PGA.
+
+        Rule 3 (c): Mean of selected records should remain above the lower bound target spectrum.
+            For selection = 1: Sa_rec = (Sa_1 or Sa_2) - lower bound = 0.9 * SaTarget(0.2Tp-2.0Tp)
+            For Selection = 2: Sa_rec = (Sa_1+Sa_2)*0.5 - lower bound = 0.9 * SaTarget(0.2Tp-2.0Tp)
+
+        Parameters
+        ----------
+        ag:  float, optional, the default is 0.25.
+            Peak ground acceleration [g]
+        xi: float, optional, the default is 0.05.
+            Damping
+        ImpClass: str, the default is 'II'.
+            Importance class ('I','II','III','IV')
+        Type: str, optional, the default is 'Type1'
+            Type of spectrum (Option: 'Type1' or 'Type2')
+        SiteClass: str, optional, the default is 'B'
+            Soil Class (Options: 'A', 'B', 'C', 'D' or 'E')
+        Tp : float, optional, the default is 1.
+            Predominant period of the structure. 
+        
+        Returns
+        -------
+        None.
+        """
+        
+        # Add selection settings to self
+        self.Tp = Tp
+        self.ag = ag
+        self.ImpClass = ImpClass
+        self.Type = Type
+        self.SiteClass = SiteClass
+        self.code = 'EC8-Part1'
+
+        # Set the period range
+        self.Tlower = 0.2 * Tp
+        self.Tupper = 2.0 * Tp
+
+        # Match periods (known periods and periods for error computations)
+        # Add Sa(T=0) or PGA, approximated as Sa(T=0.01)
+        perKnown = self.database['Periods']
+        self.T = np.append(perKnown[0], perKnown[(perKnown >= self.Tlower) * (perKnown <= self.Tupper)])
+
+        # Determine the elastic design spectrum from the user-defined spectrum
+        if self.target_path:
+            data = np.loadtxt(self.target_path)
+            func = interpolate.interp1d(data[:,0],data[:,1], kind='linear', fill_value='extrapolate')
+            target_spec = func(self.T)
+
+        # Determine the elastic design spectrum from code
+        else:
+            target_spec = Sae_ec8_part1(ag, xi, self.T, ImpClass, Type, SiteClass)
+            
+        # Consider the lower bound spectrum specified by the code as target spectrum
+        target_spec[1:] = 0.9 * target_spec[1:]  # scale down except for Sa(T[0]) or PGA
+        if self.selection == 2:
+            self.Sa_def = 'ArithmeticMean'
+
+        # Search the database and filter
+        sampleBig, Vs30, Mw, Rjb, fault, Filename_1, Filename_2, NGA_num, eq_ID_, station_code = self._search_database()
+
+        # Sample size of the filtered database
+        nBig = sampleBig.shape[0]
+
+        # Find best matches to the target spectrum from ground-motion database
+        temp = (np.matlib.repmat(target_spec, nBig, 1) - sampleBig) ** 2
+        mse = temp.mean(axis=1)
+
+        if self.database['Name'].startswith('ESM'):
+            d = {ni: indi for indi, ni in enumerate(set(eq_ID_.tolist()))}
+            eq_ID = np.asarray([d[ni] for ni in eq_ID_.tolist()])
+        else:
+            eq_ID = eq_ID_.copy()
+
+        recID_sorted = np.argsort(mse)
+        recIDs = np.ones(self.nGM, dtype=int) * (-1)
+        eqIDs = np.ones(self.nGM, dtype=int) * (-1)
+        idx1 = 0
+        idx2 = 0
+        while idx1 < self.nGM:  # not more than 3 of the records should be from the same event
+            tmp1 = recID_sorted[idx2]
+            idx2 += 1
+            tmp2 = eq_ID[tmp1]
+            recIDs[idx1] = tmp1
+            eqIDs[idx1] = tmp2
+            if np.sum(eqIDs == tmp2) <= self.RecPerEvent:
+                idx1 += 1
+
+        # Initial selection results - based on MSE
+        sampleSmall = sampleBig[recIDs.tolist(), :]
+        scaleFac = np.max(target_spec / sampleSmall.mean(axis=0))
+
+        # Apply optimization procedures
+        if self.opt != 0:
+            for i in range(self.nGM):  # Loop for nGM
+                minID = recIDs[i]
+                devSig = np.max(np.std(sampleSmall * scaleFac, axis=0))  # Compute standard deviation
+                devMean = np.max(np.abs(target_spec - np.mean(sampleSmall, axis=0)) * scaleFac)
+                DevTot = devMean * self.weights[0] + devSig * self.weights[1]
+                sampleSmall = np.delete(sampleSmall, i, 0)
+                recIDs = np.delete(recIDs, i)
+                eqIDs = np.delete(eqIDs, i)
+
+                # Try to add a new spectra to the subset list
+                if self.opt == 1:  # try to optimize scaling factor only (closest to 1)
+                    minID, scaleFac = self._opt1(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, nBig, eq_ID, sampleBig, self.RecPerEvent)
+                if self.opt == 2:  # try to optimize the error (max(mean-target) + max(std))
+                    minID, scaleFac = self._opt2(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, DevTot, nBig, eq_ID, sampleBig, self.weights, self.maxScale, self.RecPerEvent)
+                # Add new element in the right slot
+                sampleSmall = np.concatenate(
+                    (sampleSmall[:i, :], sampleBig[minID, :].reshape(1, sampleBig.shape[1]), sampleSmall[i:, :]),
+                    axis=0)
+                recIDs = np.concatenate((recIDs[:i], np.array([minID]), recIDs[i:]))
+                eqIDs = np.concatenate((eqIDs[:i], np.array([eq_ID[minID]]), eqIDs[i:]))
 
         recIDs = recIDs.tolist()
         # Add selected record information to self
@@ -3193,12 +2594,8 @@ class ec8_part1(utility):
 
         rec_idxs = []
         if self.selection == 1:
-            if self.database['Name'].startswith("EXSIM"):
-                SaKnown = self.database['Sa_1']
-                Filename_1 = self.database['Filename_1']
-            else:
-                SaKnown = np.append(self.database['Sa_1'], self.database['Sa_2'], axis=0)
-                Filename_1 = np.append(self.database['Filename_1'], self.database['Filename_2'], axis=0)
+            SaKnown = np.append(self.database['Sa_1'], self.database['Sa_2'], axis=0)
+            Filename_1 = np.append(self.database['Filename_1'], self.database['Filename_2'], axis=0)
             for rec in self.rec_h1:
                 rec_idxs.append(np.where(Filename_1 == rec)[0][0])
             self.rec_spec = SaKnown[rec_idxs, :]
@@ -3206,14 +2603,13 @@ class ec8_part1(utility):
         elif self.selection == 2:
             for rec in self.rec_h1:
                 rec_idxs.append(np.where(self.database['Filename_1'] == rec)[0][0])
-            self.rec_spec1 = self.database['Sa_1'][rec_idxs, :]
-            self.rec_spec2 = self.database['Sa_2'][rec_idxs, :]
+            self.rec_spec = 0.5*(self.database['Sa_1'][rec_idxs, :]+self.database['Sa_2'][rec_idxs, :])
 
         # Save the results for whole spectral range
         self.T = self.database['Periods']
-        if target_path:
-            self.design_spectrum = func(self.T)
+        if self.target_path:
+            self.target = func(self.T)
         else:
-            self.design_spectrum = self.get_Sae_EC8(ag, xi, self.T, I, Type, Soil)
+            self.target = Sae_ec8_part1(ag, xi, self.T, ImpClass, Type, SiteClass)
 
         print('Ground motion selection is finished scaling factor is %.3f' % self.rec_scale)

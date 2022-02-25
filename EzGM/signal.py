@@ -1,13 +1,6 @@
 """
-Ground motion record processing ToolBox
+Functions used for signal processing
 """
-
-import numpy as np
-import numpy.matlib
-from scipy.integrate import cumtrapz
-from scipy.fft import fft, fftfreq, fftshift
-from scipy.signal import butter, filtfilt
-
 
 def baseline_correction(values, dt, polynomial_type):
     """
@@ -37,6 +30,8 @@ def baseline_correction(values, dt, polynomial_type):
     values_corrected: numpy.array
         corrected values
     """
+
+    import numpy as np
 
     if polynomial_type == 'Constant':
         n = 0
@@ -92,6 +87,9 @@ def butterworth_filter(values, dt, cut_off=(0.1, 25), **kwargs):
     values_filtered: numpy.array
         Filtered signal.
     """
+
+    import numpy as np
+    from scipy.signal import butter, filtfilt
 
     if isinstance(cut_off, list) or isinstance(cut_off, tuple):
         pass
@@ -199,6 +197,9 @@ def sdof_ltha(Ag, dt, T, xi, m=1):
     ac_tot: numpy.array 
         Total acceleration response history.
     """
+
+    import numpy as np
+    import numpy.matlib
 
     if isinstance(T, (int, float)):
         T = np.array([T])
@@ -370,6 +371,11 @@ def get_parameters(Ag, dt, T, xi):
             Velocity spectrum intensity.
             Requires T to be defined between (0.1-2.5 sec), otherwise not applicable, and equal to -1.
     """
+
+    import numpy as np
+    import numpy.matlib
+    from scipy.integrate import cumtrapz
+    from scipy.fft import fft, fftfreq, fftshift
 
     if isinstance(T, (int, float)):
         T = np.array([T])
@@ -569,6 +575,9 @@ def RotDxx_spectrum(Ag1, Ag2, dt, T, xi, xx):
     Sa_RotDxx: numpy.array 
         RotDxx Spectra.
     """
+
+    import numpy as np
+    import numpy.matlib
 
     if isinstance(T, (int, float)):
         T = np.array([T])

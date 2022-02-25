@@ -1,3 +1,3 @@
 from . import selection
-from . import processing
-from . import post_oq
+from . import signal
+from . import utility
