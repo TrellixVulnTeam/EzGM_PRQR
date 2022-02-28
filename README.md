@@ -17,7 +17,7 @@ The package has three different modules:
    Currently, the records can be selected from the two publicly available databases: *NGA_W2* and *ESM_2018*. 
    The original flat-files for these databases were modified by discarding the records which are not possible to download. <br />
    The database files which include features to perform record selection are stored as .mat files in path/to/EzGM/Meta_Data.
-   If the user desires to use/add another database such as EXSIM_Duzce, s/he must stick to the same format in publicly available databases. <br />
+   If the user desires to use/add another database such as ESM_2018.mat, s/he must stick to the same format in publicly available databases. <br />
    Upon performing ground motion record selection/scaling if user desires to get formatted records, for the given metadata, s/he should place the available records from metadata file into the Records.zip with the name of database, 
    e.g. *ESM_2018.zip* for database *ESM_2018*. 
    <br /> In case of publicly available databases, the user can also download the records directly by using the associated methods since the records are not generally available beforehand.
