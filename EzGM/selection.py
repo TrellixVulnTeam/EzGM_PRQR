@@ -2107,8 +2107,8 @@ class code_spectrum(_subclass_):
             print('Warning! nGM must be at least 11 according to TBEC 2018. Changing...')
             self.nGM = 11
 
-        if self.RecPerEvent < 3:
-            print('Warning! Limit for Record Per Event must be at least 3 according to TBEC 2018. Changing...')
+        if self.RecPerEvent > 3:
+            print('Warning! Limit for Record Per Event must be at most 3 according to TBEC 2018. Changing...')
             self.RecPerEvent = 3
         
         # Set the period range
