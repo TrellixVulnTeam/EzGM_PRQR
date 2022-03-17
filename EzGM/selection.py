@@ -260,26 +260,21 @@ class _subclass_:
 
             # Start saving records
             for i in range(n):
-                # This is necessary, since scale factor is a single value for code-based selection
-                if type(self.rec_scale) is float:
-                    SF = self.rec_scale
-                else:
-                    SF = self.rec_scale[i]
 
                 # Read the record files
                 if self.database['Name'].startswith('NGA'):  # NGA
                     dts[i], npts1, _, _, inp_acc1 = ReadNGA(inFilename=self.rec_h1[i], content=contents1[i])
-                    gmr_file1 = self.rec_h1[i].replace('/', '_')[:-4] + '_SF_' + "{:.3f}".format(SF) + '.txt'
+                    gmr_file1 = self.rec_h1[i].replace('/', '_')[:-4] + '_SF_' + "{:.3f}".format(self.rec_scale[i]) + '.txt'
                     if self.selection == 2:  # H2 component
                         _, npts2, _, _, inp_acc2 = ReadNGA(inFilename=self.rec_h2[i], content=contents2[i])
-                        gmr_file2 = self.rec_h2[i].replace('/', '_')[:-4] + '_SF_' + "{:.3f}".format(SF) + '.txt'
+                        gmr_file2 = self.rec_h2[i].replace('/', '_')[:-4] + '_SF_' + "{:.3f}".format(self.rec_scale[i]) + '.txt'
 
                 elif self.database['Name'].startswith('ESM'):  # ESM
                     dts[i], npts1, _, _, inp_acc1 = ReadESM(inFilename=self.rec_h1[i], content=contents1[i])
-                    gmr_file1 = self.rec_h1[i][:-4] + '_SF_' + "{:.3f}".format(SF) + '.txt'
+                    gmr_file1 = self.rec_h1[i][:-4] + '_SF_' + "{:.3f}".format(self.rec_scale[i]) + '.txt'
                     if self.selection == 2:  # H2 component
                         _, npts2, _, _, inp_acc2 = ReadESM(inFilename=self.rec_h2[i], content=contents2[i])
-                        gmr_file2 = self.rec_h2[i][:-4] + '_SF_' + "{:.3f}".format(SF) + '.txt'
+                        gmr_file2 = self.rec_h2[i][:-4] + '_SF_' + "{:.3f}".format(self.rec_scale[i]) + '.txt'
 
                 # Write the record files
                 if self.selection == 2:
@@ -294,13 +289,13 @@ class _subclass_:
 
                     # Accelerations for H2 component
                     path = os.path.join(self.outdir, gmr_file2)
-                    acc_Sc = SF * inp_acc2
+                    acc_Sc = self.rec_scale[i] * inp_acc2
                     np.savetxt(path, acc_Sc, fmt='%1.4e')
                     h2s.write(gmr_file2 + '\n')
 
                 # Accelerations for H1 component
                 path = os.path.join(self.outdir, gmr_file1)
-                acc_Sc = SF * inp_acc1
+                acc_Sc = self.rec_scale[i] * inp_acc1
                 np.savetxt(path, acc_Sc, fmt='%1.4e')
                 h1s.write(gmr_file1 + '\n')
             # Time steps
@@ -549,8 +544,8 @@ class _subclass_:
             # Plot Target spectrum vs. Selected response spectra
             fig, ax = plt.subplots(1, 1, figsize=(8, 8))
             for i in range(self.rec_spec.shape[0]):
-                ax.plot(self.T, self.rec_spec[i, :] * self.rec_scale, color='gray', lw=1, label='Selected')
-            ax.plot(self.T, np.mean(self.rec_spec, axis=0) * self.rec_scale, color='black', lw=2, label='Selected Mean')
+                ax.plot(self.T, self.rec_spec[i, :] * self.rec_scale[i], color='gray', lw=1, label='Selected')
+            ax.plot(self.T, np.mean(self.rec_spec * self.rec_scale.reshape(-1,1), axis=0), color='black', lw=2, label='Selected Mean')
 
             if self.code == 'TBEC 2018':
                 ax.plot(self.T, self.target, color='red', lw=2, label='Design Response Spectrum')
@@ -1889,6 +1884,7 @@ class conditional_spectrum(_subclass_):
         if self.database['Name'] == 'ESM_2018':
             self.rec_station_code = station_code[recID]
 
+
 class code_spectrum(_subclass_):
     """
     This class is used for
@@ -1940,11 +1936,12 @@ class code_spectrum(_subclass_):
                 'U' for unknown
         opt : int, optional, the default is 1.
             If equal to 0, the record set is selected using
-            method of “least squares”.
-            If equal to 1, the record set selected such that 
-            scaling factor is closer to 1.
-            If equal to 2, the record set selected such that 
-            both scaling factor and standard deviation is lowered.
+            method of “least squares”, each record has individual scaling factor.
+            If equal to 1, the record set selected such that each record has
+            identical scale factor which is close to 1 as possible.
+            If equal to 2, the record set selected such that each record has
+            identical scale factor. Both scaling factor and standard deviation
+            in spectra of records are low as possible.
         maxScale : float, optional, the default is 2.
             Maximum allowed scaling factor, used with opt=2 case.
         weights = list, optional, the default is [1,1].
@@ -2118,9 +2115,8 @@ class code_spectrum(_subclass_):
         self.Tlower = 0.2 * Tp
         self.Tupper = 1.5 * Tp
 
-        # Match periods (known periods and periods for error computations)
-        perKnown = self.database['Periods']
-        self.T = perKnown[(perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
+        # Match periods (periods for error computations)
+        self.T = self.database['Periods']
 
         # Determine the elastic design spectrum from the user-defined spectrum
         if self.target_path:
@@ -2172,10 +2168,19 @@ class code_spectrum(_subclass_):
 
         # Initial selection results - based on MSE
         sampleSmall = sampleBig[recIDs.tolist(), :]
-        scaleFac = np.max(target_spec / sampleSmall.mean(axis=0))
+        scaleFac = np.array([np.sum(target_spec * sampleSmall[i, :]) / np.sum(sampleSmall[i, :] ** 2) for i in range(self.nGM)])
+
+        # Must not be lower than target within the period range
+        perKnown = self.database['Periods']
+        sampleSmall = sampleSmall[:, (perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
+        sampleBig = sampleBig[:, (perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
+        target_spec = target_spec[(perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
+        scaleFac = scaleFac * np.max(target_spec / (scaleFac.reshape(-1,1)*sampleSmall).mean(axis=0))
 
         # Apply optimization procedures
         if self.opt != 0:
+            self.T = perKnown[(perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
+            scaleFac = np.max(target_spec / sampleSmall.mean(axis=0))
             for i in range(self.nGM):  # Loop for nGM
                 minID = recIDs[i]
                 devSig = np.max(np.std(sampleSmall * scaleFac, axis=0))  # Compute standard deviation
@@ -2196,10 +2201,12 @@ class code_spectrum(_subclass_):
                     axis=0)
                 recIDs = np.concatenate((recIDs[:i], np.array([minID]), recIDs[i:]))
                 eqIDs = np.concatenate((eqIDs[:i], np.array([eq_ID[minID]]), eqIDs[i:]))
+            self.rec_scale = np.ones(self.nGM)*float(scaleFac)
+        else:
+            self.rec_scale = scaleFac
 
         recIDs = recIDs.tolist()
         # Add selected record information to self
-        self.rec_scale = float(scaleFac)
         self.rec_Vs30 = Vs30[recIDs]
         self.rec_Rjb = Rjb[recIDs]
         self.rec_Mw = Mw[recIDs]
@@ -2239,7 +2246,7 @@ class code_spectrum(_subclass_):
         else:
             self.target = Sae_tbec2018(self.T, PGA, SDS, SD1, TL)
 
-        print('Ground motion selection is finished scaling factor is %.3f' % self.rec_scale)
+        print('TBEC 2018 based ground motion record selection and amplitude scaling are finished...')
 
     def asce7_16(self, Lat=34, Long=-118, RiskCat='II', SiteClass='C', T1_small=1, T1_big=1, Tlower = None, Tupper = None):
         """
@@ -2316,9 +2323,8 @@ class code_spectrum(_subclass_):
             print('Warning! nGM must be at least 11 according to ASCE 7-16. Changing...')
             self.nGM = 11
 
-        # Match periods (known periods and periods for error computations)
-        perKnown = self.database['Periods']
-        self.T = perKnown[(perKnown >= self.Tlower) * (perKnown <= Tupper)]
+        # Match periods (periods for error computations)
+        self.T = self.database['Periods']
 
         # Determine the elastic design spectrum from the user-defined spectrum
         if self.target_path:
@@ -2368,10 +2374,19 @@ class code_spectrum(_subclass_):
 
         # Initial selection results - based on MSE
         sampleSmall = sampleBig[recIDs.tolist(), :]
-        scaleFac = np.max(target_spec / sampleSmall.mean(axis=0))
+        scaleFac = np.array([np.sum(target_spec * sampleSmall[i, :]) / np.sum(sampleSmall[i, :] ** 2) for i in range(self.nGM)])
+
+        # Must not be lower than target within the period range
+        perKnown = self.database['Periods']
+        sampleSmall = sampleSmall[:, (perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
+        sampleBig = sampleBig[:, (perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
+        target_spec = target_spec[(perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
+        scaleFac = scaleFac * np.max(target_spec / (scaleFac.reshape(-1,1)*sampleSmall).mean(axis=0))
 
         # Apply optimization procedures
         if self.opt != 0:
+            self.T = perKnown[(perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
+            scaleFac = np.max(target_spec / sampleSmall.mean(axis=0))
             for i in range(self.nGM):  # Loop for nGM
                 minID = recIDs[i]
                 devSig = np.max(np.std(sampleSmall * scaleFac, axis=0))  # Compute standard deviation
@@ -2392,10 +2407,12 @@ class code_spectrum(_subclass_):
                     axis=0)
                 recIDs = np.concatenate((recIDs[:i], np.array([minID]), recIDs[i:]))
                 eqIDs = np.concatenate((eqIDs[:i], np.array([eq_ID[minID]]), eqIDs[i:]))
+            self.rec_scale = np.ones(self.nGM)*float(scaleFac)
+        else:
+            self.rec_scale = scaleFac
 
         recIDs = recIDs.tolist()
         # Add selected record information to self
-        self.rec_scale = float(scaleFac)
         self.rec_Vs30 = Vs30[recIDs]
         self.rec_Rjb = Rjb[recIDs]
         self.rec_Mw = Mw[recIDs]
@@ -2433,7 +2450,7 @@ class code_spectrum(_subclass_):
         else:
             self.target = 1.5*Sae_asce7_16(self.T, SDS, SD1, TL)
 
-        print('Ground motion selection is finished scaling factor is %.3f' % self.rec_scale)
+        print('ASCE 7-16 based ground motion record selection and amplitude scaling are finished...')
 
     def ec8_part1(self, ag=0.2, xi=0.05, ImpClass='II', Type='Type1', SiteClass='C', Tp=1):
         """
@@ -2496,10 +2513,8 @@ class code_spectrum(_subclass_):
         self.Tlower = 0.2 * Tp
         self.Tupper = 2.0 * Tp
 
-        # Match periods (known periods and periods for error computations)
-        # Add Sa(T=0) or PGA, approximated as Sa(T=0.01)
-        perKnown = self.database['Periods']
-        self.T = np.append(perKnown[0], perKnown[(perKnown >= self.Tlower) * (perKnown <= self.Tupper)])
+        # Match periods (periods for error computations)
+        self.T = self.database['Periods']
 
         # Determine the elastic design spectrum from the user-defined spectrum
         if self.target_path:
@@ -2512,7 +2527,7 @@ class code_spectrum(_subclass_):
             target_spec = Sae_ec8_part1(ag, xi, self.T, ImpClass, Type, SiteClass)
             
         # Consider the lower bound spectrum specified by the code as target spectrum
-        target_spec[1:] = 0.9 * target_spec[1:]  # scale down except for Sa(T[0]) or PGA
+        target_spec = 0.9 * target_spec  # scale down except for Sa(T[0]) or PGA
         if self.selection == 2:
             self.Sa_def = 'ArithmeticMean'
 
@@ -2548,10 +2563,22 @@ class code_spectrum(_subclass_):
 
         # Initial selection results - based on MSE
         sampleSmall = sampleBig[recIDs.tolist(), :]
-        scaleFac = np.max(target_spec / sampleSmall.mean(axis=0))
+        scaleFac = np.array([np.sum(target_spec * sampleSmall[i, :]) / np.sum(sampleSmall[i, :] ** 2) for i in range(self.nGM)])
+
+        # Must not be lower than target within the period range
+        perKnown = self.database['Periods']
+        idxs = np.where((perKnown >= self.Tlower) * (perKnown <= self.Tupper))[0].tolist()
+        idxs.insert(0,0) # Add Sa(T=0) or PGA, approximated as Sa(T=0.01)
+        sampleSmall = sampleSmall[:, idxs]
+        sampleBig = sampleBig[:, idxs]
+        target_spec = target_spec[idxs]
+        target_spec[0] = target_spec[0] / 0.9  # scale up for Sa(T[0]) or PGA
+        scaleFac = scaleFac * np.max(target_spec / (scaleFac.reshape(-1,1)*sampleSmall).mean(axis=0))
 
         # Apply optimization procedures
         if self.opt != 0:
+            self.T = perKnown[idxs]
+            scaleFac = np.max(target_spec / sampleSmall.mean(axis=0))
             for i in range(self.nGM):  # Loop for nGM
                 minID = recIDs[i]
                 devSig = np.max(np.std(sampleSmall * scaleFac, axis=0))  # Compute standard deviation
@@ -2572,10 +2599,12 @@ class code_spectrum(_subclass_):
                     axis=0)
                 recIDs = np.concatenate((recIDs[:i], np.array([minID]), recIDs[i:]))
                 eqIDs = np.concatenate((eqIDs[:i], np.array([eq_ID[minID]]), eqIDs[i:]))
+            self.rec_scale = np.ones(self.nGM)*float(scaleFac)
+        else:
+            self.rec_scale = scaleFac
 
         recIDs = recIDs.tolist()
         # Add selected record information to self
-        self.rec_scale = float(scaleFac)
         self.rec_Vs30 = Vs30[recIDs]
         self.rec_Rjb = Rjb[recIDs]
         self.rec_Mw = Mw[recIDs]
@@ -2612,4 +2641,4 @@ class code_spectrum(_subclass_):
         else:
             self.target = Sae_ec8_part1(ag, xi, self.T, ImpClass, Type, SiteClass)
 
-        print('Ground motion selection is finished scaling factor is %.3f' % self.rec_scale)
+        print('EC8 - Part 1 based ground motion record selection and amplitude scaling are finished...')
