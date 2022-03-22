@@ -20,8 +20,8 @@ start_time = time()
 
 # Define the target spectrum
 spec = code_spectrum(database='NGA_W2', outdir='Outputs', target_path=target_path, nGM=11, selection=2,
-            Mw_lim=[6.5, 8], Vs30_lim=[200, 700], Rjb_lim=[0, 20], fault_lim=None, opt=2, 
-            maxScale=2, weights=[1, 1], RecPerEvent=3)
+            Mw_lim=[6.5, 8], Vs30_lim=[200, 700], Rjb_lim=[0, 20], fault_lim=None, opt=1, 
+            maxScale=2.5, weights=[1, 1], RecPerEvent=3)
 
 # 2.) Select the ground motions
 # If no user-defined spectrum is targeted, site parameters must be inserted by user to construct target spectrum

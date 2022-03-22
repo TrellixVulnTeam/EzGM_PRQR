@@ -1893,7 +1893,7 @@ class code_spectrum(_subclass_):
     """
 
     def __init__(self, database='NGA_W2', outdir='Outputs', target_path=None, nGM=11, selection=1,
-               Mw_lim=None, Vs30_lim=None, Rjb_lim=None, fault_lim=None, opt=1, maxScale=2, weights=[1, 1], RecPerEvent=3):
+               Mw_lim=None, Vs30_lim=None, Rjb_lim=None, fault_lim=None, opt=1, maxScale=2, RecPerEvent=3):
         """
         Details
         -------
@@ -1935,17 +1935,12 @@ class code_spectrum(_subclass_):
                 'TS' for predominately thrust with strike-slip component
                 'U' for unknown
         opt : int, optional, the default is 1.
-            If equal to 0, the record set is selected using
+            If equal to 1, the record set is selected using
             method of “least squares”, each record has individual scaling factor.
-            If equal to 1, the record set selected such that each record has
-            identical scale factor which is close to 1 as possible.
             If equal to 2, the record set selected such that each record has
-            identical scale factor. Both scaling factor and standard deviation
-            in spectra of records are low as possible.
+            identical scale factor which is as close as possible to 1.
         maxScale : float, optional, the default is 2.
             Maximum allowed scaling factor, used with opt=2 case.
-        weights = list, optional, the default is [1,1].
-            Error weights (mean,std), used with opt=2 case.
         RecPerEvent: int, the default is 3.
             The limit for the maximum number of records belong to the same event
 
@@ -1974,13 +1969,12 @@ class code_spectrum(_subclass_):
         self.fault_lim = fault_lim
         self.opt = opt
         self.maxScale = maxScale
-        self.weights = np.array(weights, dtype=float)
         self.target_path = target_path
         self.RecPerEvent = RecPerEvent
 
     @staticmethod
     @njit
-    def _opt1(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, nBig, eq_ID, sampleBig, RecPerEvent):
+    def _opt2(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, nBig, eq_ID, sampleBig, RecPerEvent):
         # Optimize based on scaling factor
         def mean_numba(a):
 
@@ -2004,50 +1998,6 @@ class code_spectrum(_subclass_):
                 if abs(tempScale - 1) <= abs(scaleFac - 1):
                     minID = j
                     scaleFac = tempScale
-
-        return minID, scaleFac
-
-    @staticmethod
-    @njit
-    def _opt2(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, DevTot, nBig, eq_ID, sampleBig, weights, maxScale, RecPerEvent):
-        # Optimize based on dispersion
-        def mean_numba(a):
-
-            res = []
-            for i in range(a.shape[1]):
-                res.append(a[:, i].mean())
-
-            return np.array(res)
-
-        def std_numba(a):
-
-            res = []
-            for i in range(a.shape[1]):
-                res.append(a[:, i].std())
-
-            return np.array(res)
-
-        for j in range(nBig):
-            tmp = eq_ID[j]
-
-            # record should not be repeated and number of eqs from the same event should not exceed 3
-            if not np.any(recIDs == j) and np.sum(eqIDs == tmp) < RecPerEvent:
-                # Add to the sample the scaled spectra
-                temp = np.zeros((1, len(sampleBig[j, :])))
-                temp[:, :] = sampleBig[j, :]  # get the trial spectra
-                tempSample = np.concatenate((sampleSmall, temp), axis=0)  # add the trial spectra to subset list
-                tempScale = np.max(target_spec / mean_numba(tempSample))  # compute new scaling factor
-                tempSig = std_numba(tempSample * tempScale)  # Compute standard deviation
-                tempMean = mean_numba(tempSample * tempScale)  # Compute mean
-                devSig = np.max(tempSig)  # Compute maximum standard deviation
-                devMean = np.max(np.abs(target_spec - tempMean))  # Compute maximum difference in mean
-                tempDevTot = devMean * weights[0] + devSig * weights[1]
-
-                # Should cause improvement
-                if maxScale > tempScale > 1 / maxScale and tempDevTot <= DevTot:
-                    minID = j
-                    scaleFac = tempScale
-                    DevTot = tempDevTot
 
         return minID, scaleFac
 
@@ -2142,6 +2092,9 @@ class code_spectrum(_subclass_):
         # Sample size of the filtered database
         nBig = sampleBig.shape[0]
 
+        # Scale factors based on mse
+        scaleFac = np.array(np.sum(np.matlib.repmat(target_spec, nBig, 1) * sampleBig, axis=1) / np.sum(sampleBig ** 2, axis=1))
+
         # Find best matches to the target spectrum from ground-motion database
         temp = (np.matlib.repmat(target_spec, nBig, 1) - sampleBig) ** 2
         mse = temp.mean(axis=1)
@@ -2167,43 +2120,37 @@ class code_spectrum(_subclass_):
                 idx1 += 1
 
         # Initial selection results - based on MSE
-        sampleSmall = sampleBig[recIDs.tolist(), :]
-        scaleFac = np.array([np.sum(target_spec * sampleSmall[i, :]) / np.sum(sampleSmall[i, :] ** 2) for i in range(self.nGM)])
+        finalScaleFac = scaleFac[recIDs]
+        sampleSmall = sampleBig[recIDs, :]
 
-        # Must not be lower than target within the period range
-        perKnown = self.database['Periods']
-        sampleSmall = sampleSmall[:, (perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
-        sampleBig = sampleBig[:, (perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
-        target_spec = target_spec[(perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
-        scaleFac = scaleFac * np.max(target_spec / (scaleFac.reshape(-1,1)*sampleSmall).mean(axis=0))
+        # Must not be lower than target within the period range, find the indicies for this period range
+        idxs = np.where((self.database['Periods'] >= self.Tlower) * (self.database['Periods'] <= self.Tupper))[0]
 
-        # Apply optimization procedures
-        if self.opt != 0:
-            self.T = perKnown[(perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
-            scaleFac = np.max(target_spec / sampleSmall.mean(axis=0))
+        if self.opt == 1:
+            self.rec_scale = finalScaleFac * np.max(target_spec[idxs] / (finalScaleFac.reshape(-1,1)*sampleSmall[:,idxs]).mean(axis=0))
+
+        # try to optimize scaling factor to make it closest as possible to 1
+        if self.opt == 2:
+            finalScaleFac = np.max(target_spec[idxs] / sampleSmall[:,idxs].mean(axis=0))
             for i in range(self.nGM):  # Loop for nGM
+                # note the ID of the record which is removed
                 minID = recIDs[i]
-                devSig = np.max(np.std(sampleSmall * scaleFac, axis=0))  # Compute standard deviation
-                devMean = np.max(np.abs(target_spec - np.mean(sampleSmall, axis=0)) * scaleFac)
-                DevTot = devMean * self.weights[0] + devSig * self.weights[1]
-                sampleSmall = np.delete(sampleSmall, i, 0)
+                # remove the i'th record search for a candidate, and consider critical periods for error calculations only
+                sampleSmall_reduced = np.delete(sampleSmall[:,idxs], i, 0)
                 recIDs = np.delete(recIDs, i)
                 eqIDs = np.delete(eqIDs, i)
-
                 # Try to add a new spectra to the subset list
-                if self.opt == 1:  # try to optimize scaling factor only (closest to 1)
-                    minID, scaleFac = self._opt1(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, nBig, eq_ID, sampleBig, self.RecPerEvent)
-                if self.opt == 2:  # try to optimize the error (max(mean-target) + max(std))
-                    minID, scaleFac = self._opt2(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, DevTot, nBig, eq_ID, sampleBig, self.weights, self.maxScale, self.RecPerEvent)
+                minID, finalScaleFac = self._opt2(sampleSmall_reduced, finalScaleFac, target_spec[idxs], recIDs, eqIDs, minID, nBig, eq_ID, sampleBig[:,idxs], self.RecPerEvent)
                 # Add new element in the right slot
-                sampleSmall = np.concatenate(
-                    (sampleSmall[:i, :], sampleBig[minID, :].reshape(1, sampleBig.shape[1]), sampleSmall[i:, :]),
-                    axis=0)
+                sampleSmall = np.concatenate((sampleSmall[:i, :], sampleBig[minID, :].reshape(1, sampleBig.shape[1]), sampleSmall[i:, :]),axis=0)
                 recIDs = np.concatenate((recIDs[:i], np.array([minID]), recIDs[i:]))
                 eqIDs = np.concatenate((eqIDs[:i], np.array([eq_ID[minID]]), eqIDs[i:]))
-            self.rec_scale = np.ones(self.nGM)*float(scaleFac)
-        else:
-            self.rec_scale = scaleFac
+            self.rec_scale = np.ones(self.nGM)*float(finalScaleFac)
+
+        # check the scaling
+        if np.any(self.rec_scale > self.maxScale) or np.any(self.rec_scale < 1/self.maxScale):
+            raise ValueError('Scaling factor criteria is not satisfied',
+                             'Please broaden your selection and scaling criteria or change the optimization scheme...')
 
         recIDs = recIDs.tolist()
         # Add selected record information to self
@@ -2348,6 +2295,9 @@ class code_spectrum(_subclass_):
         # Sample size of the filtered database
         nBig = sampleBig.shape[0]
 
+        # Scale factors based on mse
+        scaleFac = np.array(np.sum(np.matlib.repmat(target_spec, nBig, 1) * sampleBig, axis=1) / np.sum(sampleBig ** 2, axis=1))
+
         # Find best matches to the target spectrum from ground-motion database
         temp = (np.matlib.repmat(target_spec, nBig, 1) - sampleBig) ** 2
         mse = temp.mean(axis=1)
@@ -2373,44 +2323,37 @@ class code_spectrum(_subclass_):
                 idx1 += 1
 
         # Initial selection results - based on MSE
-        sampleSmall = sampleBig[recIDs.tolist(), :]
-        scaleFac = np.array([np.sum(target_spec * sampleSmall[i, :]) / np.sum(sampleSmall[i, :] ** 2) for i in range(self.nGM)])
+        finalScaleFac = scaleFac[recIDs]
+        sampleSmall = sampleBig[recIDs, :]
 
-        # Must not be lower than target within the period range
-        perKnown = self.database['Periods']
-        sampleSmall = sampleSmall[:, (perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
-        sampleBig = sampleBig[:, (perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
-        target_spec = target_spec[(perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
-        scaleFac = scaleFac * np.max(target_spec / (scaleFac.reshape(-1,1)*sampleSmall).mean(axis=0))
+        # Must not be lower than target within the period range, find the indicies for this period range
+        idxs = np.where((self.database['Periods'] >= self.Tlower) * (self.database['Periods'] <= self.Tupper))[0]
 
-        # Apply optimization procedures
-        if self.opt != 0:
-            self.T = perKnown[(perKnown >= self.Tlower) * (perKnown <= self.Tupper)]
-            scaleFac = np.max(target_spec / sampleSmall.mean(axis=0))
+        if self.opt == 1:
+            self.rec_scale = finalScaleFac * np.max(target_spec[idxs] / (finalScaleFac.reshape(-1,1)*sampleSmall[:,idxs]).mean(axis=0))
+
+        # try to optimize scaling factor to make it closest as possible to 1
+        if self.opt == 2:
+            finalScaleFac = np.max(target_spec[idxs] / sampleSmall[:,idxs].mean(axis=0))
             for i in range(self.nGM):  # Loop for nGM
+                # note the ID of the record which is removed
                 minID = recIDs[i]
-                devSig = np.max(np.std(sampleSmall * scaleFac, axis=0))  # Compute standard deviation
-                devMean = np.max(np.abs(target_spec - np.mean(sampleSmall, axis=0)) * scaleFac)
-                DevTot = devMean * self.weights[0] + devSig * self.weights[1]
-                sampleSmall = np.delete(sampleSmall, i, 0)
+                # remove the i'th record search for a candidate, and consider critical periods for error calculations only
+                sampleSmall_reduced = np.delete(sampleSmall[:,idxs], i, 0)
                 recIDs = np.delete(recIDs, i)
                 eqIDs = np.delete(eqIDs, i)
-
                 # Try to add a new spectra to the subset list
-                if self.opt == 1:  # try to optimize scaling factor only (closest to 1)
-                    minID, scaleFac = self._opt1(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, nBig, eq_ID, sampleBig, self.RecPerEvent)
-                if self.opt == 2:  # try to optimize the error (max(mean-target) + max(std))
-                    minID, scaleFac = self._opt2(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, DevTot, nBig, eq_ID, sampleBig, self.weights, self.maxScale, self.RecPerEvent)
+                minID, finalScaleFac = self._opt2(sampleSmall_reduced, finalScaleFac, target_spec[idxs], recIDs, eqIDs, minID, nBig, eq_ID, sampleBig[:,idxs], self.RecPerEvent)
                 # Add new element in the right slot
-                sampleSmall = np.concatenate(
-                    (sampleSmall[:i, :], sampleBig[minID, :].reshape(1, sampleBig.shape[1]), sampleSmall[i:, :]),
-                    axis=0)
+                sampleSmall = np.concatenate((sampleSmall[:i, :], sampleBig[minID, :].reshape(1, sampleBig.shape[1]), sampleSmall[i:, :]),axis=0)
                 recIDs = np.concatenate((recIDs[:i], np.array([minID]), recIDs[i:]))
                 eqIDs = np.concatenate((eqIDs[:i], np.array([eq_ID[minID]]), eqIDs[i:]))
-            self.rec_scale = np.ones(self.nGM)*float(scaleFac)
-        else:
-            self.rec_scale = scaleFac
+            self.rec_scale = np.ones(self.nGM)*float(finalScaleFac)
 
+        # check the scaling
+        if np.any(self.rec_scale > self.maxScale) or np.any(self.rec_scale < 1/self.maxScale):
+            raise ValueError('Scaling factor criteria is not satisfied',
+                             'Please broaden your selection and scaling criteria or change the optimization scheme...')
         recIDs = recIDs.tolist()
         # Add selected record information to self
         self.rec_Vs30 = Vs30[recIDs]
@@ -2537,6 +2480,9 @@ class code_spectrum(_subclass_):
         # Sample size of the filtered database
         nBig = sampleBig.shape[0]
 
+        # Scale factors based on mse
+        scaleFac = np.array(np.sum(np.matlib.repmat(target_spec, nBig, 1) * sampleBig, axis=1) / np.sum(sampleBig ** 2, axis=1))
+
         # Find best matches to the target spectrum from ground-motion database
         temp = (np.matlib.repmat(target_spec, nBig, 1) - sampleBig) ** 2
         mse = temp.mean(axis=1)
@@ -2562,46 +2508,39 @@ class code_spectrum(_subclass_):
                 idx1 += 1
 
         # Initial selection results - based on MSE
-        sampleSmall = sampleBig[recIDs.tolist(), :]
-        scaleFac = np.array([np.sum(target_spec * sampleSmall[i, :]) / np.sum(sampleSmall[i, :] ** 2) for i in range(self.nGM)])
-
-        # Must not be lower than target within the period range
-        perKnown = self.database['Periods']
-        idxs = np.where((perKnown >= self.Tlower) * (perKnown <= self.Tupper))[0].tolist()
-        idxs.insert(0,0) # Add Sa(T=0) or PGA, approximated as Sa(T=0.01)
-        sampleSmall = sampleSmall[:, idxs]
-        sampleBig = sampleBig[:, idxs]
-        target_spec = target_spec[idxs]
+        finalScaleFac = scaleFac[recIDs]
+        sampleSmall = sampleBig[recIDs, :]
         target_spec[0] = target_spec[0] / 0.9  # scale up for Sa(T[0]) or PGA
-        scaleFac = scaleFac * np.max(target_spec / (scaleFac.reshape(-1,1)*sampleSmall).mean(axis=0))
 
-        # Apply optimization procedures
-        if self.opt != 0:
-            self.T = perKnown[idxs]
-            scaleFac = np.max(target_spec / sampleSmall.mean(axis=0))
+        # Must not be lower than target within the period range, find the indicies for this period range
+        idxs = np.where((self.database['Periods'] >= self.Tlower) * (self.database['Periods'] <= self.Tupper))[0]
+        idxs = np.append(0,idxs)  # Add Sa(T=0) or PGA, approximated as Sa(T=0.01)
+
+        if self.opt == 1:
+            self.rec_scale = finalScaleFac * np.max(target_spec[idxs] / (finalScaleFac.reshape(-1,1)*sampleSmall[:,idxs]).mean(axis=0))
+
+        # try to optimize scaling factor to make it closest as possible to 1
+        if self.opt == 2:
+            finalScaleFac = np.max(target_spec[idxs] / sampleSmall[:,idxs].mean(axis=0))
             for i in range(self.nGM):  # Loop for nGM
+                # note the ID of the record which is removed
                 minID = recIDs[i]
-                devSig = np.max(np.std(sampleSmall * scaleFac, axis=0))  # Compute standard deviation
-                devMean = np.max(np.abs(target_spec - np.mean(sampleSmall, axis=0)) * scaleFac)
-                DevTot = devMean * self.weights[0] + devSig * self.weights[1]
-                sampleSmall = np.delete(sampleSmall, i, 0)
+                # remove the i'th record search for a candidate, and consider critical periods for error calculations only
+                sampleSmall_reduced = np.delete(sampleSmall[:,idxs], i, 0)
                 recIDs = np.delete(recIDs, i)
                 eqIDs = np.delete(eqIDs, i)
-
                 # Try to add a new spectra to the subset list
-                if self.opt == 1:  # try to optimize scaling factor only (closest to 1)
-                    minID, scaleFac = self._opt1(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, nBig, eq_ID, sampleBig, self.RecPerEvent)
-                if self.opt == 2:  # try to optimize the error (max(mean-target) + max(std))
-                    minID, scaleFac = self._opt2(sampleSmall, scaleFac, target_spec, recIDs, eqIDs, minID, DevTot, nBig, eq_ID, sampleBig, self.weights, self.maxScale, self.RecPerEvent)
+                minID, finalScaleFac = self._opt2(sampleSmall_reduced, finalScaleFac, target_spec[idxs], recIDs, eqIDs, minID, nBig, eq_ID, sampleBig[:,idxs], self.RecPerEvent)
                 # Add new element in the right slot
-                sampleSmall = np.concatenate(
-                    (sampleSmall[:i, :], sampleBig[minID, :].reshape(1, sampleBig.shape[1]), sampleSmall[i:, :]),
-                    axis=0)
+                sampleSmall = np.concatenate((sampleSmall[:i, :], sampleBig[minID, :].reshape(1, sampleBig.shape[1]), sampleSmall[i:, :]),axis=0)
                 recIDs = np.concatenate((recIDs[:i], np.array([minID]), recIDs[i:]))
                 eqIDs = np.concatenate((eqIDs[:i], np.array([eq_ID[minID]]), eqIDs[i:]))
-            self.rec_scale = np.ones(self.nGM)*float(scaleFac)
-        else:
-            self.rec_scale = scaleFac
+            self.rec_scale = np.ones(self.nGM)*float(finalScaleFac)
+
+        # check the scaling
+        if np.any(self.rec_scale > self.maxScale) or np.any(self.rec_scale < 1/self.maxScale):
+            raise ValueError('Scaling factor criteria is not satisfied',
+                             'Please broaden your selection and scaling criteria or change the optimization scheme...')
 
         recIDs = recIDs.tolist()
         # Add selected record information to self
