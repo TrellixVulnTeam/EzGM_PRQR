@@ -1461,7 +1461,10 @@ class conditional_spectrum(_subclass_):
             # Set the contexts for the scenario
             sctx = gsim.base.SitesContext()
             for key in site_param.keys(): # Site parameters are constant for each scenario
-                temp = np.array([site_param[key]], dtype='float64')
+                if isinstance(site_param[key], bool):
+                    temp = np.array([site_param[key]])
+                else:
+                    temp = np.array([site_param[key]], dtype='float64')
                 setattr(sctx, key, temp)
 
             rctx = gsim.base.RuptureContext()
