@@ -1274,7 +1274,7 @@ class conditional_spectrum(_subclass_):
             if self.Sa_def == 'RotD100' and not 'RotD100' in self.bgmpe.DEFINED_FOR_INTENSITY_MEASURE_COMPONENT and self.selection == 2:
                 rotD100Ratio, rotD100Sigma = self._gmpe_sb_2014_ratios(self.Tstar[i])
                 mu_lnSaT[i] = mu_lnSaT[i] + np.log(rotD100Ratio)
-                sigma_lnSaT[i] = (sigma_lnSaT[i]**2 + rotD100Sigma**2)
+                sigma_lnSaT[i] = (sigma_lnSaT[i]**2 + rotD100Sigma**2) ** 0.5
 
             for j in range(n):
                 rho = self._get_correlation(self.Tstar[i], self.Tstar[j])
@@ -1486,7 +1486,7 @@ class conditional_spectrum(_subclass_):
                 if self.Sa_def == 'RotD100' and not 'RotD100' in self.bgmpe.DEFINED_FOR_INTENSITY_MEASURE_COMPONENT and self.selection == 2:
                     rotD100Ratio, rotD100Sigma = self._gmpe_sb_2014_ratios(self.T[i])
                     mu_lnSaT[i] = mu_lnSaT[i] + np.log(rotD100Ratio)
-                    sigma_lnSaT[i] = (sigma_lnSaT[i] ** 2 + rotD100Sigma ** 2)
+                    sigma_lnSaT[i] = (sigma_lnSaT[i] ** 2 + rotD100Sigma ** 2) ** 0.5
 
             if self.cond == 1:
                 # Get the GMPE output and calculate AvgSa_Tstar and associated dispersion
