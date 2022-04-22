@@ -7,7 +7,6 @@ from EzGM.utility import check_gmpe_attributes, get_esm_token, run_time
 from time import time
 import numpy as np
 
-
 # A) IM = Sa(Tstar) Database = NGA_W2
 # -----------------------------------
 start_time = time()
@@ -19,14 +18,14 @@ cs = conditional_spectrum(database='NGA_W2', outdir='Outputs_A')
 # check the attributes of gmpe to use 'AkkarEtAlRjb2014'
 check_gmpe_attributes(gmpe='AkkarEtAlRjb2014')
 
-# Note that intensity measure compoentn is Average horizontal:Geometric mean of two horizontal components
+# Note that intensity measure compoentn is IMC.GEOMETRIC_MEAN:Geometric mean of two horizontal components
 cs.create(Tstar=0.5, gmpe='AkkarEtAlRjb2014', selection=1, Sa_def='GeoMean', 
           site_param={'vs30': 500}, rup_param={'rake': [0.0], 'mag': [7.5]},
           dist_param={'rjb': [10]}, Hcont=None, T_Tgt_range=[0.1, 4.0],
           im_Tstar=1.0, epsilon=None, cond=1, useVar=1, corr_func='akkar')
 
 # Target spectrum can be plotted at this stage
-cs.plot(tgt=1, sim=0, rec=0, save=1, show=1)
+cs.plot(tgt=1, sim=0, rec=0, save=1, show=0)
 
 # A.3) Select the ground motions
 cs.select(nGM=25, isScaled=1, maxScale=4, nTrials=20,
@@ -34,11 +33,11 @@ cs.select(nGM=25, isScaled=1, maxScale=4, nTrials=20,
           Mw_lim=[5.5, 8], Vs30_lim=[360, 760], Rjb_lim=[0, 50], fault_lim=None)
 
 # The simulated spectra and spectra of selected records can be plotted at this stage
-cs.plot(tgt=0, sim=1, rec=1, save=1, show=1)
+cs.plot(tgt=0, sim=1, rec=1, save=1, show=0)
 
 # A.4) If database == 'NGA_W2' you can first download the records via nga_download method
 # from NGA-West2 Database [http://ngawest2.berkeley.edu/] and then use write method
-cs.ngaw2_download(username = 'example_username@email.com', pwd = 'example_password123456', sleeptime=3, browser='firefox')
+cs.ngaw2_download('example_username@email.com', pwd = 'example_password123456', sleeptime=3, browser='firefox')
 
 # A.5) If you have records already inside recs_f\database.zip\database or
 # downloaded records for database = NGA_W2 case, write whatever you want,
@@ -59,7 +58,7 @@ cs = conditional_spectrum(database='ESM_2018', outdir='Outputs_B')
 # check the attributes of gmpe to use 'AkkarEtAlRjb2014'
 check_gmpe_attributes(gmpe='AkkarEtAlRjb2014')
 
-# Note that intensity measure compoentn is Average horizontal: Geometric mean of two horizontal components
+# Note that intensity measure component is IMC.GEOMETRIC_MEAN: Geometric mean of two horizontal components
 cs.create(Tstar=0.5, gmpe='AkkarEtAlRjb2014', selection=1, Sa_def='GeoMean', 
           site_param={'vs30': 500}, rup_param={'rake': [0.0], 'mag': [7.5]},
           dist_param={'rjb': [10]}, Hcont=None, T_Tgt_range=[0.1, 4.0],
@@ -81,7 +80,7 @@ cs.plot(tgt=0, sim=1, rec=1, save=1, show=1)
 
 # In order to access token file must be retrieved initially.
 # copy paste the readily available token.txt into EzGM or generate new one using get_esm_token method.
-get_esm_token(username = 'example_username@email.com', pwd = 'example_password123456')
+get_esm_token('example_username@email.com', pwd = 'example_password123456')
 
 # If token is ready esm2018_download method can be used
 cs.esm2018_download()

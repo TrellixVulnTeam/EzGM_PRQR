@@ -11,7 +11,7 @@ Utility functions used to:
 ################### Methods to post-process OpenQuake PSHA results ##########################
 #############################################################################################
 
-def hazard_curve(poes, path_hazard_results, output_dir='Post_Outputs', rlz='hazard_curve-mean'):
+def hazard_curve(poes, path_hazard_results, output_dir='Post_Outputs', filename='hazard_curve-mean'):
     """
     Details
     -------
@@ -26,8 +26,8 @@ def hazard_curve(poes, path_hazard_results, output_dir='Post_Outputs', rlz='haza
         Path to the hazard results.
     output_dir: str, optional
         Save outputs to a pickle file.
-    rlz : str, optional
-        realization name to plot.
+    filename : str, optional
+        filename to process.
 
     Returns
     -------
@@ -98,7 +98,7 @@ def hazard_curve(poes, path_hazard_results, output_dir='Post_Outputs', rlz='haza
 
     # Read through each file in the outputs folder
     for file in os.listdir(path_hazard_results):
-        if file.startswith(rlz):
+        if file.startswith(filename):
 
             # print(file)
             # Strip the IM out of the file name
@@ -139,7 +139,7 @@ def hazard_curve(poes, path_hazard_results, output_dir='Post_Outputs', rlz='haza
                 apoe.append(temp)
 
     # Get intensity measure levels corresponding to poes
-    plt.figure()
+    fig = plt.figure()
     for i in range(len(s)):
         plt.loglog(s[i], apoe[i], label=im[i])
         iml = get_iml(np.asarray(poes), np.asarray(apoe[i]), np.asarray(s[i]), inv_t)
@@ -164,6 +164,7 @@ def hazard_curve(poes, path_hazard_results, output_dir='Post_Outputs', rlz='haza
     plt.tight_layout()
     fname = os.path.join(output_dir, 'Hazard_Curves.png')
     plt.savefig(fname, format='png', dpi=220)
+    plt.close(fig)
 
     for i in range(len(apoe)):
         poe = 1 - (1 - np.asarray(apoe[i])) ** inv_t
@@ -174,7 +175,7 @@ def hazard_curve(poes, path_hazard_results, output_dir='Post_Outputs', rlz='haza
         fname = os.path.join(output_dir, 'HazardCurve_' + im[i] + '.out')
         np.savetxt(fname, haz_cur)
 
-def disagg_MR(Mbin, dbin, poe_disagg, path_disagg_results, output_dir='Post_Outputs', n_rows=1):
+def disagg_MR(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_rows=1, filename='Mag_Dist'):
     """
     Details
     -------
@@ -186,14 +187,14 @@ def disagg_MR(Mbin, dbin, poe_disagg, path_disagg_results, output_dir='Post_Outp
         magnitude bin used in disaggregation.
     dbin : int, float
         distance bin used in disaggregation.
-    poe_disagg : list
-        disaggregation probability of exceedances.
     path_disagg_results: str
         Path to the disaggregation results.
     output_dir: str, optional
         Save outputs to a pickle file.
     n_rows : int, optional
         total number of rows for subplots.
+    filename : str, optional
+        filename to process.
 
     Returns
     -------
@@ -209,131 +210,104 @@ def disagg_MR(Mbin, dbin, poe_disagg, path_disagg_results, output_dir='Post_Outp
 
     # lets add the plotting options to make everything clearer
     cmap = cm.get_cmap('jet')  # Get desired colormap
-    lat = []
-    lon = []
-    modeLst, meanLst = [], []
-    im = []
-    poe = []
-    Tr = []
-    apoe_norm = []
-    M, R = [], []
 
     for file in os.listdir(path_disagg_results):
-        if file.startswith('rlz') and file.find('Mag_Dist') > 0 > file.find('Mag_Dist_Eps'):
+        if file.startswith(filename) and 'Mag_Dist_Eps' not in file:
             # Load the dataframe
             df = pd.read_csv(''.join([path_disagg_results, '/', file]), skiprows=1)
-
-            # Strip the IM out of the file name
-            im.append(file.rsplit('-')[2])
-
+            poes = np.unique(df['poe']).tolist()
+            poes.sort(reverse=True)
             # Get some salient values
             f = open(''.join([path_disagg_results, '/', file]), "r")
             ff = f.readline().split(',')
-            try:  # for OQ version <3.11
-                inv_t = float(ff[8].replace(" investigation_time=", ""))
-                poe.append(float(ff[11].replace(" poe=", "").replace("'", "")))
-            except:  # for OQ version 3.11
-                inv_t = float(ff[5].replace(" investigation_time=", ""))
-                poe.append(float(ff[-1].replace(" poe=", "").replace("\"", "").replace("\n", "")))
-            lon.append(float(ff[9].replace(" lon=", "")))
-            lat.append(float(ff[10].replace(" lat=", "")))
-            Tr.append(-inv_t / np.log(1 - poe[-1]))
+            lon = float(ff[-2].replace(" lon=", ""))
+            lat = float(ff[-1].replace(" lat=", "").replace("\"\n", ""))
+            ims = np.unique(df['imt'])
+            inv_t = float(ff[7].replace(" investigation_time=", ""))
+            for imt in ims:
+                M, R = [], []
+                apoe_norm = []
+                Tr = []
+                modeLst, meanLst = [], []
+                for poe in poes:
+                    Tr.append(round(-inv_t / np.log(1 - poe)))
+                    data = {}
+                    data['mag'] = df['mag'][(df['poe'] == poe) & (df['imt'] == imt)]
+                    data['dist']= df['dist'][(df['poe'] == poe) & (df['imt'] == imt)]
+                    data['apoe'] = -np.log(1 - df['rlz0'][(df['poe'] == poe) & (df['imt'] == imt)]) / inv_t
+                    apoe_norm.append(data['apoe']/data['apoe'].sum())
+                    data['apoe_norm'] = apoe_norm[-1]
+                    data = pd.DataFrame(data)
+                    # Compute the modal value (highest apoe)
+                    mode = data.sort_values(by='apoe_norm', ascending=False)[0:1]
+                    modeLst.append([mode['mag'].values[0], mode['dist'].values[0]])
+                    # Compute the mean value
+                    meanLst.append([np.sum(data['mag'] * data['apoe_norm']), np.sum(data['dist'] * data['apoe_norm'])])
 
-            # Extract the poe and annualise
-            df['apoe'] = -np.log(1 - df['poe']) / inv_t
+                    # Report the individual mangnitude and distance bins
+                    M.append(data['mag'])
+                    R.append(data['dist'])
 
-            # Normalise the apoe for disaggregation plotting
-            df['apoe_norm'] = df['apoe'] / df['apoe'].sum()
-            apoe_norm.append(df['apoe_norm'])
+                n_Tr = len(Tr)
+                mags = []
+                dists = []
 
-            # Compute the modal value (highest apoe)
-            mode = df.sort_values(by='apoe_norm', ascending=False)[0:1]
-            modeLst.append([mode['mag'].values[0], mode['dist'].values[0]])
+                n_cols = int(np.floor(n_Tr / n_rows))
+                if np.mod(n_Tr, n_rows):
+                    n_cols += 1
 
-            # Compute the mean value
-            meanLst.append([np.sum(df['mag'] * df['apoe_norm']), np.sum(df['dist'] * df['apoe_norm'])])
+                fig = plt.figure(figsize=(19.2, 10.8))
+                for i in range(n_Tr):
+                    ax1 = fig.add_subplot(n_rows, n_cols, i + 1, projection='3d')
 
-            # Report the individual mangnitude and distance bins
-            M.append(df['mag'])
-            R.append(df['dist'])
+                    X = R[i]
+                    Y = M[i]
+                    Z = np.zeros(len(X))
 
-    lon = [x for _, x in sorted(zip(Tr, lon))]
-    lat = [x for _, x in sorted(zip(Tr, lat))]
-    im = [x for _, x in sorted(zip(Tr, im))]
-    M = [x for _, x in sorted(zip(Tr, M))]
-    R = [x for _, x in sorted(zip(Tr, R))]
-    apoe_norm = [x for _, x in sorted(zip(Tr, apoe_norm))]
-    modeLst = [x for _, x in sorted(zip(Tr, modeLst))]
-    meanLst = [x for _, x in sorted(zip(Tr, meanLst))]
+                    dx = np.ones(len(X)) * dbin / 2
+                    dy = np.ones(len(X)) * Mbin / 2
+                    dz = apoe_norm[i] * 100
 
-    Tr = -inv_t / np.log(1 - np.asarray(poe_disagg))
-    n_Tr = len(np.unique(np.asarray(Tr)))
-    Tr = sorted(Tr)
-    ims = np.unique(im)
-    n_im = len(ims)
+                    # here we may make the colormap based on epsilon instead of hazard contribution
+                    max_height = np.max(dz)  # get range of colorbars so we can normalize
+                    min_height = np.min(dz)
+                    # scale each z to [0,1], and get their rgb values
+                    rgba = [cmap((k - min_height) / max_height) for k in dz]
+                    ax1.bar3d(X, Y, Z, dx, dy, dz, color=rgba, zsort='average', alpha=0.7, shade=True)
 
-    lon = lon[0]
-    lat = lat[0]
+                    ax1.set_xlabel('R [km]')
+                    ax1.set_ylabel('$M_{w}$')
+                    if np.mod(i + 1, n_cols) == 1:
+                        ax1.set_zlabel('Hazard Contribution [%]')
+                        ax1.zaxis.set_rotate_label(False)  # disable automatic rotation
+                        ax1.set_zlabel('Hazard Contribution [%]', rotation=90)
+                    ax1.zaxis._axinfo['juggled'] = (1, 2, 0)
 
-    mags = []
-    dists = []
+                    plt.title('$T_{R}$=%s years\n$M_{mod}$=%s, $R_{mod}$=%s km\n$M_{mean}$=%s, $R_{mean}$=%s km'
+                              % ("{:.0f}".format(Tr[i]), "{:.2f}".format(modeLst[i][0]), "{:.0f}".format(modeLst[i][1]),
+                                 "{:.2f}".format(meanLst[i][0]), "{:.0f}".format(meanLst[i][1])),
+                              fontsize=11, loc='right', verticalalignment='top', y=0.95)
 
-    n_cols = int(np.floor(n_Tr / n_rows))
-    if np.mod(n_Tr, n_rows):
-        n_cols += 1
+                    mags.append(meanLst[i][0])
+                    dists.append(meanLst[i][1])
 
-    for idx1 in range(n_im):
-        fig = plt.figure(figsize=(19.2, 10.8))
-        for idx2 in range(n_Tr):
-            i = idx1 * n_Tr + idx2
-            ax1 = fig.add_subplot(n_rows, n_cols, idx2 + 1, projection='3d')
+                plt.subplots_adjust(hspace=0.05, wspace=0.05)  # adjust the subplot to the right for the legend
+                fig.suptitle('Disaggregation of Seismic Hazard\nIntensity Measure: %s\nLatitude: %s, Longitude: %s' % (
+                    imt, "{:.4f}".format(lat), "{:.4f}".format(lon)), fontsize=14, weight='bold', ha='left', x=0.0,
+                             y=1.0)
 
-            X = R[i]
-            Y = M[i]
-            Z = np.zeros(len(X))
+                plt.tight_layout(rect=[0, 0.0, 1, 0.94])
+                fname = os.path.join(output_dir, 'Disaggregation_MR_' + imt + '.png')
+                plt.savefig(fname, format='png', dpi=220)
 
-            dx = np.ones(len(X)) * dbin / 2
-            dy = np.ones(len(X)) * Mbin / 2
-            dz = apoe_norm[i] * 100
+                fname = os.path.join(output_dir, 'mean_mags_' + imt + '.out')
+                np.savetxt(fname, np.asarray(mags), fmt='%.2f')
+                fname = os.path.join(output_dir, 'mean_dists_' + imt + '.out')
+                np.savetxt(fname, np.asarray(dists), fmt='%.1f')
 
-            # here we may make the colormap based on epsilon instead of hazard contribution
-            max_height = np.max(dz)  # get range of colorbars so we can normalize
-            min_height = np.min(dz)
-            # scale each z to [0,1], and get their rgb values
-            rgba = [cmap((k - min_height) / max_height) for k in dz]
-            ax1.bar3d(X, Y, Z, dx, dy, dz, color=rgba, zsort='average', alpha=0.7, shade=True)
+                plt.close(fig)
 
-            ax1.set_xlabel('R [km]')
-            ax1.set_ylabel('$M_{w}$')
-            if np.mod(idx2 + 1, n_cols) == 1:
-                ax1.set_zlabel('Hazard Contribution [%]')
-                ax1.zaxis.set_rotate_label(False)  # disable automatic rotation
-                ax1.set_zlabel('Hazard Contribution [%]', rotation=90)
-            ax1.zaxis._axinfo['juggled'] = (1, 2, 0)
-
-            plt.title('$T_{R}$=%s years\n$M_{mod}$=%s, $R_{mod}$=%s km\n$M_{mean}$=%s, $R_{mean}$=%s km'
-                      % ("{:.0f}".format(Tr[idx2]), "{:.2f}".format(modeLst[i][0]), "{:.0f}".format(modeLst[i][1]),
-                         "{:.2f}".format(meanLst[i][0]), "{:.0f}".format(meanLst[i][1])),
-                      fontsize=11, loc='right', verticalalignment='top', y=0.95)
-
-            mags.append(meanLst[i][0])
-            dists.append(meanLst[i][1])
-
-        plt.subplots_adjust(hspace=0.05, wspace=0.05)  # adjust the subplot to the right for the legend
-        fig.suptitle('Disaggregation of Seismic Hazard\nIntensity Measure: %s\nLatitude: %s, Longitude: %s' % (
-            ims[idx1], "{:.4f}".format(lat), "{:.4f}".format(lon)), fontsize=14, weight='bold', ha='left', x=0.0,
-                     y=1.0)
-
-        plt.tight_layout(rect=[0, 0.0, 1, 0.94])
-        fname = os.path.join(output_dir, 'Disaggregation_MR_' + ims[idx1] + '.png')
-        plt.savefig(fname, format='png', dpi=220)
-
-        fname = os.path.join(output_dir, 'mean_mags_' + ims[idx1] + '.out')
-        np.savetxt(fname, np.asarray(mags), fmt='%.2f')
-        fname = os.path.join(output_dir, 'mean_dists_' + ims[idx1] + '.out')
-        np.savetxt(fname, np.asarray(dists), fmt='%.1f')
-
-def disagg_MReps(Mbin, dbin, poe_disagg, path_disagg_results, output_dir='Post_Outputs', n_rows=1):
+def disagg_MReps(Mbin, dbin, poe_disagg, path_disagg_results, output_dir='Post_Outputs', n_rows=1, filename='Mag_Dist_Eps'):
     """
     Details
     -------
@@ -346,14 +320,14 @@ def disagg_MReps(Mbin, dbin, poe_disagg, path_disagg_results, output_dir='Post_O
         magnitude bin used in disaggregation.
     dbin : int, float
         distance bin used in disaggregation.
-    poe_disagg : list
-        disaggregation probability of exceedances
     path_disagg_results: str
         Path to the hazard results
     output_dir: str, optional
         Save outputs to a pickle file
     n_rows : int, optional
         total number of rows for subplots.
+    filename : str, optional
+        filename to process.
 
     Returns
     -------
@@ -370,144 +344,119 @@ def disagg_MReps(Mbin, dbin, poe_disagg, path_disagg_results, output_dir='Post_O
 
     # lets add the plotting options to make everything clearer
     cmap = cm.get_cmap('jet')  # Get desired colormap
-    lat = []
-    lon = []
-    modeLst, meanLst = [], []
-    im = []
-    poe = []
-    Tr = []
-    apoe_norm = []
-    M, R, eps = [], [], []
+
     mags = []
     dists = []
 
     for file in os.listdir(path_disagg_results):
-        if file.startswith('rlz') and file.find('Mag_Dist_Eps') > 0:
+        if file.startswith(filename):
             # Load the dataframe
             df = pd.read_csv(''.join([path_disagg_results, '/', file]), skiprows=1)
-
-            # Strip the IM out of the file name
-            im.append(file.rsplit('-')[2])
-
+            poes = np.unique(df['poe']).tolist()
+            poes.sort(reverse=True)
             # Get some salient values
             f = open(''.join([path_disagg_results, '/', file]), "r")
             ff = f.readline().split(',')
-            try:  # for OQ version <3.11
-                inv_t = float(ff[9].replace(" investigation_time=", ""))
-                poe.append(float(ff[12].replace(" poe=", "").replace("'", "")))
-            except:
-                inv_t = float(ff[6].replace(" investigation_time=", ""))
-                poe.append(float(ff[-1].replace(" poe=", "").replace("\"", "").replace("\n", "")))
-            lon.append(float(ff[10].replace(" lon=", "")))
-            lat.append(float(ff[11].replace(" lat=", "")))
-            Tr.append(-inv_t / np.log(1 - poe[-1]))
+            lon = float(ff[-2].replace(" lon=", ""))
+            lat = float(ff[-1].replace(" lat=", "").replace("\"\n", ""))
+            ims = np.unique(df['imt'])
+            inv_t = float(ff[8].replace(" investigation_time=", ""))
+            for imt in ims:
+                modeLst, meanLst = [], []
+                Tr = []
+                apoe_norm = []
+                M, R, eps = [], [], []
+                for poe in poes:
+                    Tr.append(round(-inv_t / np.log(1 - poe)))
+                    data = {}
+                    data['mag'] = df['mag'][(df['poe'] == poe) & (df['imt'] == imt)]
+                    data['eps'] = df['eps'][(df['poe'] == poe) & (df['imt'] == imt)]
+                    data['dist']= df['dist'][(df['poe'] == poe) & (df['imt'] == imt)]
+                    data['apoe'] = -np.log(1 - df['rlz0'][(df['poe'] == poe) & (df['imt'] == imt)]) / inv_t
+                    apoe_norm.append(np.array(data['apoe']/data['apoe'].sum()))
+                    data['apoe_norm'] = apoe_norm[-1]
+                    data = pd.DataFrame(data)
+                    # Compute the modal value (highest apoe)
+                    mode = data.sort_values(by='apoe_norm', ascending=False)[0:1]
+                    modeLst.append([mode['mag'].values[0], mode['dist'].values[0], mode['eps'].values[0]])
+                    # Compute the mean value
+                    meanLst.append([np.sum(data['mag'] * data['apoe_norm']), np.sum(data['dist'] * data['apoe_norm']),
+                            np.sum(data['eps'] * data['apoe_norm'])])
 
-            # Extract the poe and annualise
-            df['apoe'] = -np.log(1 - df['poe']) / inv_t
+                    # Report the individual mangnitude and distance bins
+                    M.append(np.array(data['mag']))
+                    R.append(np.array(data['dist']))
+                    eps.append(np.array(data['eps']))
 
-            # Normalise the apoe for disaggregation plotting
-            df['apoe_norm'] = df['apoe'] / df['apoe'].sum()
-            apoe_norm.append(df['apoe_norm'])
+                n_Tr = len(Tr)
+                n_eps = len(np.unique(np.asarray(eps)))
+                min_eps = np.min(np.unique(np.asarray(eps)))  # get range of colorbars so we can normalize
+                max_eps = np.max(np.unique(np.asarray(eps)))
 
-            # Compute the modal value (highest apoe)
-            mode = df.sort_values(by='apoe_norm', ascending=False)[0:1]
-            modeLst.append([mode['mag'].values[0], mode['dist'].values[0], mode['eps'].values[0]])
+                n_cols = int(np.floor(n_Tr / n_rows))
+                if np.mod(n_Tr, n_rows):
+                    n_cols += 1
 
-            # Compute the mean value
-            meanLst.append([np.sum(df['mag'] * df['apoe_norm']), np.sum(df['dist'] * df['apoe_norm']),
-                            np.sum(df['eps'] * df['apoe_norm'])])
+                fig = plt.figure(figsize=(19.2, 10.8))
+                for i in range(n_Tr):
+                    ax1 = fig.add_subplot(n_rows, n_cols, i + 1, projection='3d')
 
-            M.append(df['mag'])
-            R.append(df['dist'])
-            eps.append(df['eps'])
+                    # scale each eps to [0,1], and get their rgb values
+                    rgba = [cmap((k - min_eps) / max_eps / 2) for k in (np.unique(np.asarray(eps)))]
+                    num_triads_M_R_eps = len(R[i])
+                    Z = np.zeros(int(num_triads_M_R_eps / n_eps))
 
-    lon = [x for _, x in sorted(zip(Tr, lon))]
-    lat = [x for _, x in sorted(zip(Tr, lat))]
-    im = [x for _, x in sorted(zip(Tr, im))]
-    M = [x for _, x in sorted(zip(Tr, M))]
-    R = [x for _, x in sorted(zip(Tr, R))]
-    eps = [x for _, x in sorted(zip(Tr, eps))]
-    apoe_norm = [x for _, x in sorted(zip(Tr, apoe_norm))]
-    modeLst = [x for _, x in sorted(zip(Tr, modeLst))]
-    meanLst = [x for _, x in sorted(zip(Tr, meanLst))]
+                    for l in range(n_eps):
+                        X = np.array(R[i][np.arange(l, num_triads_M_R_eps, n_eps)])
+                        Y = np.array(M[i][np.arange(l, num_triads_M_R_eps, n_eps)])
 
-    Tr = -inv_t / np.log(1 - np.asarray(poe_disagg))
-    n_Tr = len(np.unique(np.asarray(Tr)))
-    Tr = sorted(Tr)
-    ims = np.unique(im)
-    n_im = len(ims)
-    n_eps = len(np.unique(np.asarray(eps)))
-    min_eps = np.min(np.unique(np.asarray(eps)))  # get range of colorbars so we can normalize
-    max_eps = np.max(np.unique(np.asarray(eps)))
+                        dx = np.ones(int(num_triads_M_R_eps / n_eps)) * dbin / 2
+                        dy = np.ones(int(num_triads_M_R_eps / n_eps)) * Mbin / 2
+                        dz = np.array(apoe_norm[i][np.arange(l, num_triads_M_R_eps, n_eps)]) * 100
 
-    lon = lon[0]
-    lat = lat[0]
+                        ax1.bar3d(X, Y, Z, dx, dy, dz, color=rgba[l], zsort='average', alpha=0.7, shade=True)
+                        Z += dz  # add the height of each bar to know where to start the next
 
-    n_cols = int(np.floor(n_Tr / n_rows))
-    if np.mod(n_Tr, n_rows):
-        n_cols += 1
+                    ax1.set_xlabel('R [km]')
+                    ax1.set_ylabel('$M_{w}$')
+                    if np.mod(i + 1, n_cols) == 1:
+                        ax1.set_zlabel('Hazard Contribution [%]')
+                        ax1.zaxis.set_rotate_label(False)  # disable automatic rotation
+                        ax1.set_zlabel('Hazard Contribution [%]', rotation=90)
+                    ax1.zaxis._axinfo['juggled'] = (1, 2, 0)
 
-    for idx1 in range(n_im):
-        fig = plt.figure(figsize=(19.2, 10.8))
-        for idx2 in range(n_Tr):
-            i = idx1 * n_Tr + idx2
-            ax1 = fig.add_subplot(n_rows, n_cols, idx2 + 1, projection='3d')
+                    plt.title(
+                        '$T_{R}$=%s years\n$M_{mod}$=%s, $R_{mod}$=%s km, $\epsilon_{mod}$=%s\n$M_{mean}$=%s, $R_{mean}$=%s '
+                        'km, $\epsilon_{mean}$=%s'
+                        % ("{:.0f}".format(Tr[i]), "{:.2f}".format(modeLst[i][0]), "{:.0f}".format(modeLst[i][1]),
+                           "{:.1f}".format(modeLst[i][2]),
+                           "{:.2f}".format(meanLst[i][0]), "{:.0f}".format(meanLst[i][1]), "{:.1f}".format(meanLst[i][2])),
+                        fontsize=11, loc='right', va='top', y=0.95)
 
-            # scale each eps to [0,1], and get their rgb values
-            rgba = [cmap((k - min_eps) / max_eps / 2) for k in (np.unique(np.asarray(eps)))]
-            num_triads_M_R_eps = len(R[i])
-            Z = np.zeros(int(num_triads_M_R_eps / n_eps))
+                    mags.append(meanLst[i][0])
+                    dists.append(meanLst[i][1])
 
-            for l in range(n_eps):
-                X = np.array(R[i][np.arange(l, num_triads_M_R_eps, n_eps)])
-                Y = np.array(M[i][np.arange(l, num_triads_M_R_eps, n_eps)])
+                legend_elements = []
+                for j in range(n_eps):
+                    legend_elements.append(Patch(facecolor=rgba[n_eps - j - 1],
+                                                 label='\u03B5 = %.2f' % (np.unique(np.asarray(eps))[n_eps - j - 1])))
 
-                dx = np.ones(int(num_triads_M_R_eps / n_eps)) * dbin / 2
-                dy = np.ones(int(num_triads_M_R_eps / n_eps)) * Mbin / 2
-                dz = np.array(apoe_norm[i][np.arange(l, num_triads_M_R_eps, n_eps)]) * 100
+                fig.legend(handles=legend_elements, loc="lower center", borderaxespad=0.,
+                           ncol=n_eps)
+                plt.subplots_adjust(hspace=0.05, wspace=0.05)  # adjust the subplot to the right for the legend
+                fig.suptitle('Disaggregation of Seismic Hazard\nIntensity Measure: %s\nLatitude: %s, Longitude: %s' % (
+                    imt, "{:.4f}".format(lat), "{:.4f}".format(lon)), fontsize=14, weight='bold', ha='left', x=0.0,
+                             y=1.0)
+                plt.tight_layout(rect=[0, 0.03, 1, 0.94])
+                fname = os.path.join(output_dir, 'Disaggregation_MReps_' + imt + '.png')
+                plt.savefig(fname, format='png', dpi=220)
 
-                ax1.bar3d(X, Y, Z, dx, dy, dz, color=rgba[l], zsort='average', alpha=0.7, shade=True)
-                Z += dz  # add the height of each bar to know where to start the next
+                fname = os.path.join(output_dir, 'mean_mags_' + imt + '.out')
+                np.savetxt(fname, np.asarray(mags), fmt='%.2f')
+                fname = os.path.join(output_dir, 'mean_dists_' + imt + '.out')
+                np.savetxt(fname, np.asarray(dists), fmt='%.1f')
 
-            ax1.set_xlabel('R [km]')
-            ax1.set_ylabel('$M_{w}$')
-            if np.mod(idx2 + 1, n_cols) == 1:
-                ax1.set_zlabel('Hazard Contribution [%]')
-                ax1.zaxis.set_rotate_label(False)  # disable automatic rotation
-                ax1.set_zlabel('Hazard Contribution [%]', rotation=90)
-            ax1.zaxis._axinfo['juggled'] = (1, 2, 0)
-
-            plt.title(
-                '$T_{R}$=%s years\n$M_{mod}$=%s, $R_{mod}$=%s km, $\epsilon_{mod}$=%s\n$M_{mean}$=%s, $R_{mean}$=%s '
-                'km, $\epsilon_{mean}$=%s'
-                % ("{:.0f}".format(Tr[i]), "{:.2f}".format(modeLst[i][0]), "{:.0f}".format(modeLst[i][1]),
-                   "{:.1f}".format(modeLst[i][2]),
-                   "{:.2f}".format(meanLst[i][0]), "{:.0f}".format(meanLst[i][1]), "{:.1f}".format(meanLst[i][2])),
-                fontsize=11, loc='right', va='top', y=0.95)
-
-            mags.append(meanLst[i][0])
-            dists.append(meanLst[i][1])
-
-        legend_elements = []
-        for j in range(n_eps):
-            legend_elements.append(Patch(facecolor=rgba[n_eps - j - 1],
-                                         label='\u03B5 = %.2f' % (np.unique(np.asarray(eps))[n_eps - j - 1])))
-
-        fig.legend(handles=legend_elements, loc="lower center", borderaxespad=0.,
-                   ncol=n_eps)
-        plt.subplots_adjust(hspace=0.05, wspace=0.05)  # adjust the subplot to the right for the legend
-        fig.suptitle('Disaggregation of Seismic Hazard\nIntensity Measure: %s\nLatitude: %s, Longitude: %s' % (
-            ims[idx1], "{:.4f}".format(lat), "{:.4f}".format(lon)), fontsize=14, weight='bold', ha='left', x=0.0,
-                     y=1.0)
-        plt.tight_layout(rect=[0, 0.03, 1, 0.94])
-        fname = os.path.join(output_dir, 'Disaggregation_MReps_' + ims[idx1] + '.png')
-        plt.savefig(fname, format='png', dpi=220)
-
-        fname = os.path.join(output_dir, 'mean_mags_' + ims[idx1] + '.out')
-        np.savetxt(fname, np.asarray(mags), fmt='%.2f')
-        fname = os.path.join(output_dir, 'mean_dists_' + ims[idx1] + '.out')
-        np.savetxt(fname, np.asarray(dists), fmt='%.1f')
-
+                plt.close(fig)
 #############################################################################################
 ##################### Methods to read ground motion record files ############################
 #############################################################################################

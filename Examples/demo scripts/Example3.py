@@ -56,13 +56,13 @@ os.chdir(cwd) # go back to the previous working directory
 hazard_curve(poes, results_dir, post_dir)
 
 # Extract and plot disaggregation results by M and R
-disagg_MR(mag_bin_width, distance_bin_width, poes, results_dir, post_dir, n_rows=3)
+disagg_MR(mag_bin_width, distance_bin_width, results_dir, post_dir, n_rows=3)
 
 # Extract and plot disaggregation results by M, R and epsilon
 disagg_MReps(mag_bin_width, distance_bin_width, poes, results_dir, post_dir, n_rows=3)
 
 # Get ESM token for ESM database.
-get_esm_token('volkan.ozsarac@iusspavia.it', pwd = '22041993Gs')
+get_esm_token('example_username@email.com', pwd = 'example_password123456')
 
 # Check attributes of ground motion prediction equation BooreEtAl2014
 check_gmpe_attributes(gmpe='BooreEtAl2014')

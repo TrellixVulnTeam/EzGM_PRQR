@@ -11,7 +11,7 @@ import EzGM
 The package has three different modules: 
 1. **EzGM.selection** deals with the record selection. 
    It can be used to perform unconditional or conditional spectrum based selection in which intensity measure can be chosen as Sa(T*) or AvgSa(T*). The tool makes use of 
-   [OpenQuake hazard library](https://docs.openquake.org/oq-engine/3.11/openquake.hazardlib.gsim.html#ground-shaking-intensity-models) and 
+   [OpenQuake hazard library](https://docs.openquake.org/oq-engine/3.14/openquake.hazardlib.gsim.html#ground-shaking-intensity-models) and 
    thus any available ground motion prediction equation available can directly be used (see Example 1). <br />
    It can also be used to perform the selection based on Turkish Building Earthquake Code, TBEC-2018, ASCE 7-16, and Eurocode 8 Part 1 (see Example 2). <br />
    Currently, the records can be selected from the two publicly available databases: *NGA_W2* and *ESM_2018*. 
@@ -34,15 +34,11 @@ For EzGM examples, see:
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/volkanozsarac/EzGM/HEAD?filepath=Examples%2Fbinder)
 ***
 ## Installation
-- EzGM requires several other packages: <br /> openquake.engine==3.11.4; selenium==3.141.0; webdriverdownloader==1.1.0.3; numba==0.54.0
+- EzGM downloads google-chrome or firefox webdriver while executing ngaw2_download method. Therefore, user-specified browser ('chrome' or 'firefox') must be readily available.
+- EzGM requires several other packages: <br /> openquake.engine==3.14.0; numba==0.55.1; selenium==4.1.3; beautifulsoup4==4.11.1; tqdm==4.64.0; h5py==3.1.0; matplotlib==3.1.3
 - The package management system *pip* can be used to install EzGM. Yet, before the installation is recommended in a clean python 3.8 environment to avoid compatibility issues.
 ```
 pip install EzGM
-```
-- EzGM downloads google-chrome or firefox webdriver while executing ngaw2_download method. Therefore, user-specified browser ('chrome' or 'firefox') must be readily available.
-- Installation of Openquake package in Linux and MACOS is straightforward. In case of windows the package may not be installed correctly if anaconda is used, in other words, geos_c.dll or similar .dll files could be mislocated). To fix this simply, on conda prompt window write:
-```
-conda install shapely
 ```
 ***
 ## Acknowledgements
@@ -55,6 +51,7 @@ Volkan Ozsarac, Ricardo Monteiro & Gian Michele Calvi (2021). Probabilistic seis
 ***
 ## Potential Improvements
 - Computation of the exact CS
+- Addition of 3 component selection
 - Addition of spectral matching methods
 - Addition of generalized conditional intensity measure approach (GCIM)
 - Addition of alternative code-based ground motion selection procedures

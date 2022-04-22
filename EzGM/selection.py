@@ -19,7 +19,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import requests
 from selenium import webdriver
-from webdriverdownloader import ChromeDriverDownloader, GeckoDriverDownloader
+from .webdriverdownloader import ChromeDriverDownloader, GeckoDriverDownloader
 from numba import njit
 from openquake.hazardlib import gsim, imt, const
 from .utility import create_dir, ContentFromZip, ReadNGA, ReadESM
@@ -579,6 +579,8 @@ class _subclass_:
             if show == 1:
                 plt.show()
 
+        plt.close('all')
+
     def esm2018_download(self):
         """
 
@@ -784,7 +786,7 @@ class _subclass_:
                 # Running on Binder or Running on personal computer (PC) using firefox
                 elif (_in_ipython_session and 'jovyan' in os.getcwd()) or browser == 'firefox':
                     gdd = GeckoDriverDownloader()
-                    driver_path = gdd.download_and_install("v0.26.0")
+                    driver_path = gdd.download_and_install()
                     options = webdriver.firefox.options.Options()
                     options.headless = True
                     options.set_preference("browser.download.folderList", 2)
@@ -1375,6 +1377,8 @@ class conditional_spectrum(_subclass_):
         -------
         None.                    
         """
+        # TODO: gsim.get_mean_and_stddevs is deprecated, you should use ContextMaker.get_mean_stds,
+        # see https://docs.openquake.org/oq-engine/advanced/developing.html#working-with-gmpes-directly-the-contextmaker
 
         if cond == 1:
 
@@ -1413,6 +1417,18 @@ class conditional_spectrum(_subclass_):
 
         except:
             raise KeyError('Not a valid gmpe')
+
+        # These modifications are required for OpenQuake version > 3.13, as indicated by Michele in OQ forum
+        # Even if GMM does not require rrup per se, the engine still requires it for filtering the far away ruptures.
+        # You should assume that rrup is computed in all calculations even if not used in the functional form of the GMM.
+        if not 'rrup' in dist_param.keys():
+            if 'rjb' in dist_param.keys():
+                dist_param['rrup'] = dist_param['rjb']
+            elif 'rhypo' in dist_param.keys():
+                dist_param['rrup'] = dist_param['rhypo']
+            elif 'repi' in dist_param.keys():
+                dist_param['rrup'] = dist_param['repi']
+        site_param['sids'] = np.array([0])
 
         # add target spectrum settings to self
         self.selection = selection
