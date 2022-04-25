@@ -164,6 +164,7 @@ def hazard_curve(poes, path_hazard_results, output_dir='Post_Outputs', filename=
     plt.tight_layout()
     fname = os.path.join(output_dir, 'Hazard_Curves.png')
     plt.savefig(fname, format='png', dpi=220)
+    plt.show()
     plt.close(fig)
 
     for i in range(len(apoe)):
@@ -304,7 +305,7 @@ def disagg_MR(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_rows
                 np.savetxt(fname, np.asarray(mags), fmt='%.2f')
                 fname = os.path.join(output_dir, 'mean_dists_' + imt + '.out')
                 np.savetxt(fname, np.asarray(dists), fmt='%.1f')
-
+                plt.show()
                 plt.close(fig)
 
 def disagg_MReps(Mbin, dbin, poe_disagg, path_disagg_results, output_dir='Post_Outputs', n_rows=1, filename='Mag_Dist_Eps'):
@@ -455,7 +456,7 @@ def disagg_MReps(Mbin, dbin, poe_disagg, path_disagg_results, output_dir='Post_O
                 np.savetxt(fname, np.asarray(mags), fmt='%.2f')
                 fname = os.path.join(output_dir, 'mean_dists_' + imt + '.out')
                 np.savetxt(fname, np.asarray(dists), fmt='%.1f')
-
+                plt.show()
                 plt.close(fig)
 #############################################################################################
 ##################### Methods to read ground motion record files ############################
