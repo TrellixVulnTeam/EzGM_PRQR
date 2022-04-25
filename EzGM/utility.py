@@ -308,7 +308,7 @@ def disagg_MR(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_rows
                 plt.show()
                 plt.close(fig)
 
-def disagg_MReps(Mbin, dbin, poe_disagg, path_disagg_results, output_dir='Post_Outputs', n_rows=1, filename='Mag_Dist_Eps'):
+def disagg_MReps(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_rows=1, filename='Mag_Dist_Eps'):
     """
     Details
     -------

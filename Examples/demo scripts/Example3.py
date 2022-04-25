@@ -59,7 +59,7 @@ hazard_curve(poes, results_dir, post_dir)
 disagg_MR(mag_bin_width, distance_bin_width, results_dir, post_dir, n_rows=3)
 
 # Extract and plot disaggregation results by M, R and epsilon
-disagg_MReps(mag_bin_width, distance_bin_width, poes, results_dir, post_dir, n_rows=3)
+disagg_MReps(mag_bin_width, distance_bin_width, results_dir, post_dir, n_rows=3)
 
 # Get ESM token for ESM database.
 get_esm_token('example_username@email.com', pwd = 'example_password123456')
