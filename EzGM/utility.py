@@ -7,6 +7,7 @@ Utility functions used to:
     to check available gmpes in OpenQuake and their attributes
 """
 
+
 #############################################################################################
 ################### Methods to post-process OpenQuake PSHA results ##########################
 #############################################################################################
@@ -160,7 +161,7 @@ def hazard_curve(poes, path_hazard_results, output_dir='Post_Outputs', filename=
     plt.ylabel('Annual Probability of Exceedance')
     plt.legend()
     plt.grid(True)
-    plt.title('Mean Hazard Curves for Lat:%s Lon:%s' % (str(lat[0]), str(lon[0])))
+    plt.title(f"Mean Hazard Curves for Lat:{lat[0]} Lon:{lon[0]}")
     plt.tight_layout()
     fname = os.path.join(output_dir, 'Hazard_Curves.png')
     plt.savefig(fname, format='png', dpi=220)
@@ -175,6 +176,7 @@ def hazard_curve(poes, path_hazard_results, output_dir='Post_Outputs', filename=
         haz_cur = np.concatenate([imls, poe], axis=1)
         fname = os.path.join(output_dir, 'HazardCurve_' + im[i] + '.out')
         np.savetxt(fname, haz_cur)
+
 
 def disagg_MR(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_rows=1, filename='Mag_Dist'):
     """
@@ -234,9 +236,9 @@ def disagg_MR(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_rows
                     Tr.append(round(-inv_t / np.log(1 - poe)))
                     data = {}
                     data['mag'] = df['mag'][(df['poe'] == poe) & (df['imt'] == imt)]
-                    data['dist']= df['dist'][(df['poe'] == poe) & (df['imt'] == imt)]
+                    data['dist'] = df['dist'][(df['poe'] == poe) & (df['imt'] == imt)]
                     data['apoe'] = -np.log(1 - df['rlz0'][(df['poe'] == poe) & (df['imt'] == imt)]) / inv_t
-                    apoe_norm.append(data['apoe']/data['apoe'].sum())
+                    apoe_norm.append(data['apoe'] / data['apoe'].sum())
                     data['apoe_norm'] = apoe_norm[-1]
                     data = pd.DataFrame(data)
                     # Compute the modal value (highest apoe)
@@ -270,7 +272,7 @@ def disagg_MR(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_rows
                     dz = apoe_norm[i] * 100
 
                     # here we may make the colormap based on epsilon instead of hazard contribution
-                    max_height = np.max(dz)  # get range of colorbars so we can normalize
+                    max_height = np.max(dz)  # get range of color bars so we can normalize
                     min_height = np.min(dz)
                     # scale each z to [0,1], and get their rgb values
                     rgba = [cmap((k - min_height) / max_height) for k in dz]
@@ -293,9 +295,8 @@ def disagg_MR(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_rows
                     dists.append(meanLst[i][1])
 
                 plt.subplots_adjust(hspace=0.05, wspace=0.05)  # adjust the subplot to the right for the legend
-                fig.suptitle('Disaggregation of Seismic Hazard\nIntensity Measure: %s\nLatitude: %s, Longitude: %s' % (
-                    imt, "{:.4f}".format(lat), "{:.4f}".format(lon)), fontsize=14, weight='bold', ha='left', x=0.0,
-                             y=1.0)
+                fig.suptitle(f"Disaggregation of Seismic Hazard\nIntensity Measure: {imt}\nLatitude: "
+                             f"{lat:.4f}, Longitude: {lon:.4f}", fontsize=14, weight='bold', ha='left', x=0.0, y=1.0)
 
                 plt.tight_layout(rect=[0, 0.0, 1, 0.94])
                 fname = os.path.join(output_dir, 'Disaggregation_MR_' + imt + '.png')
@@ -307,6 +308,7 @@ def disagg_MR(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_rows
                 np.savetxt(fname, np.asarray(dists), fmt='%.1f')
                 plt.show()
                 plt.close(fig)
+
 
 def disagg_MReps(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_rows=1, filename='Mag_Dist_Eps'):
     """
@@ -372,9 +374,9 @@ def disagg_MReps(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_r
                     data = {}
                     data['mag'] = df['mag'][(df['poe'] == poe) & (df['imt'] == imt)]
                     data['eps'] = df['eps'][(df['poe'] == poe) & (df['imt'] == imt)]
-                    data['dist']= df['dist'][(df['poe'] == poe) & (df['imt'] == imt)]
+                    data['dist'] = df['dist'][(df['poe'] == poe) & (df['imt'] == imt)]
                     data['apoe'] = -np.log(1 - df['rlz0'][(df['poe'] == poe) & (df['imt'] == imt)]) / inv_t
-                    apoe_norm.append(np.array(data['apoe']/data['apoe'].sum()))
+                    apoe_norm.append(np.array(data['apoe'] / data['apoe'].sum()))
                     data['apoe_norm'] = apoe_norm[-1]
                     data = pd.DataFrame(data)
                     # Compute the modal value (highest apoe)
@@ -382,7 +384,7 @@ def disagg_MReps(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_r
                     modeLst.append([mode['mag'].values[0], mode['dist'].values[0], mode['eps'].values[0]])
                     # Compute the mean value
                     meanLst.append([np.sum(data['mag'] * data['apoe_norm']), np.sum(data['dist'] * data['apoe_norm']),
-                            np.sum(data['eps'] * data['apoe_norm'])])
+                                    np.sum(data['eps'] * data['apoe_norm'])])
 
                     # Report the individual mangnitude and distance bins
                     M.append(np.array(data['mag']))
@@ -426,13 +428,13 @@ def disagg_MReps(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_r
                         ax1.set_zlabel('Hazard Contribution [%]', rotation=90)
                     ax1.zaxis._axinfo['juggled'] = (1, 2, 0)
 
-                    plt.title(
-                        '$T_{R}$=%s years\n$M_{mod}$=%s, $R_{mod}$=%s km, $\epsilon_{mod}$=%s\n$M_{mean}$=%s, $R_{mean}$=%s '
-                        'km, $\epsilon_{mean}$=%s'
-                        % ("{:.0f}".format(Tr[i]), "{:.2f}".format(modeLst[i][0]), "{:.0f}".format(modeLst[i][1]),
-                           "{:.1f}".format(modeLst[i][2]),
-                           "{:.2f}".format(meanLst[i][0]), "{:.0f}".format(meanLst[i][1]), "{:.1f}".format(meanLst[i][2])),
-                        fontsize=11, loc='right', va='top', y=0.95)
+                    plt.title("$T_{R}$=%s years\n$M_{mod}$=%s, $R_{mod}$=%s km, $\epsilon_{mod}$=%s"
+                              "\n$M_{mean}$=%s, $R_{mean}$=%s km, $\epsilon_{mean}$=%s"
+                              % ("{:.0f}".format(Tr[i]), "{:.2f}".format(modeLst[i][0]), "{:.0f}".format(modeLst[i][1]),
+                                 "{:.1f}".format(modeLst[i][2]),
+                                 "{:.2f}".format(meanLst[i][0]), "{:.0f}".format(meanLst[i][1]),
+                                 "{:.1f}".format(meanLst[i][2])),
+                              fontsize=11, loc='right', va='top', y=0.95)
 
                     mags.append(meanLst[i][0])
                     dists.append(meanLst[i][1])
@@ -440,14 +442,12 @@ def disagg_MReps(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_r
                 legend_elements = []
                 for j in range(n_eps):
                     legend_elements.append(Patch(facecolor=rgba[n_eps - j - 1],
-                                                 label='\u03B5 = %.2f' % (np.unique(np.asarray(eps))[n_eps - j - 1])))
+                                                 label=f"\u03B5 = {np.unique(np.asarray(eps))[n_eps - j - 1]:.2f}"))
 
-                fig.legend(handles=legend_elements, loc="lower center", borderaxespad=0.,
-                           ncol=n_eps)
+                fig.legend(handles=legend_elements, loc="lower center", borderaxespad=0., ncol=n_eps)
                 plt.subplots_adjust(hspace=0.05, wspace=0.05)  # adjust the subplot to the right for the legend
-                fig.suptitle('Disaggregation of Seismic Hazard\nIntensity Measure: %s\nLatitude: %s, Longitude: %s' % (
-                    imt, "{:.4f}".format(lat), "{:.4f}".format(lon)), fontsize=14, weight='bold', ha='left', x=0.0,
-                             y=1.0)
+                fig.suptitle(f"Disaggregation of Seismic Hazard\nIntensity Measure: {imt}\nLatitude: "
+                             f"{lat:.4f}, Longitude: {lon:.4f}", fontsize=14, weight='bold', ha='left', x=0.0, y=1.0)
                 plt.tight_layout(rect=[0, 0.03, 1, 0.94])
                 fname = os.path.join(output_dir, 'Disaggregation_MReps_' + imt + '.png')
                 plt.savefig(fname, format='png', dpi=220)
@@ -458,6 +458,8 @@ def disagg_MReps(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_r
                 np.savetxt(fname, np.asarray(dists), fmt='%.1f')
                 plt.show()
                 plt.close(fig)
+
+
 #############################################################################################
 ##################### Methods to read ground motion record files ############################
 #############################################################################################
@@ -490,6 +492,7 @@ def ContentFromZip(paths, zipName):
                 contents[i] = [x.decode('utf-8') for x in myfile.readlines()]
 
     return contents
+
 
 def ReadNGA(inFilename=None, content=None, outFilename=None):
     """
@@ -539,80 +542,64 @@ def ReadNGA(inFilename=None, content=None, outFilename=None):
         # check the first line
         temp = str(content[0]).split()
         try:  # description is in the end
-            float(temp[0])
-            flag = 1
-        except:  # description is in the beginning
-            flag = 0
+            float(temp[0])  # do a test with str to float conversion, this will be ok if description is in the end.
+            # Description of the record
+            desc = content[-2]
+            # Number of points and time step of the record
+            row4Val = content[-4]
+            # Acceleration values
+            acc_data = content[:-4]
+        except ValueError:  # description is in the beginning
+            # Description of the record
+            desc = content[1]
+            # Number of points and time step of the record
+            row4Val = content[3]
+            # Acceleration values
+            acc_data = content[4:]
 
-        counter = 0
-        desc, row4Val, acc_data = "", "", []
+        # Description of the record
+        desc = desc.replace('\r', '')
+        desc = desc.replace('\n', '')
+        # Number of points and time step of the record
+        if row4Val[0][0] == 'N':
+            val = row4Val.split()
+            if 'dt=' in row4Val:
+                dt_str = 'dt='
+            elif 'DT=' in row4Val:
+                dt_str = 'DT='
+            if 'npts=' in row4Val:
+                npts_str = 'npts='
+            elif 'NPTS=' in row4Val:
+                npts_str = 'NPTS='
+            if 'sec' in row4Val:
+                sec_str = 'sec'
+            elif 'SEC' in row4Val:
+                sec_str = 'SEC'
+            npts = int(val[(val.index(npts_str)) + 1].rstrip(','))
+            try:
+                dt = float(val[(val.index(dt_str)) + 1])
+            except ValueError:
+                dt = float(val[(val.index(dt_str)) + 1].replace(sec_str + ',', ''))
+        else:
+            val = row4Val.split()
+            npts = int(val[0])
+            dt = float(val[1])
 
-        if flag == 1:
-            for x in content:
-                if counter == len(content) - 3:
-                    desc = x
-                elif counter == len(content) - 1:
-                    row4Val = x
-                    if row4Val[0][0] == 'N':
-                        val = row4Val.split()
-                        npts = float(val[(val.index('NPTS=')) + 1].rstrip(','))
-                        try:
-                            dt = float(val[(val.index('DT=')) + 1])
-                        except:
-                            dt = float(val[(val.index('DT=')) + 1].replace('SEC,', ''))
-                    else:
-                        val = row4Val.split()
-                        npts = float(val[0])
-                        dt = float(val[1])
-
-                elif counter < len(content) - 4:
-                    data = str(x).split()
-                    for value in data:
-                        a = float(value)
-                        acc_data.append(a)
-                    acc = np.asarray(acc_data)
-                counter = counter + 1
-
-        if flag == 0:
-            for x in content:
-                if counter == 1:
-                    desc = x
-                elif counter == 3:
-                    row4Val = x
-                    if row4Val[0][0] == 'N':
-                        val = row4Val.split()
-                        npts = float(val[(val.index('NPTS=')) + 1].rstrip(','))
-                        try:
-                            dt = float(val[(val.index('DT=')) + 1])
-                        except:
-                            dt = float(val[(val.index('DT=')) + 1].replace('SEC,', ''))
-                    else:
-                        val = row4Val.split()
-                        npts = float(val[0])
-                        dt = float(val[1])
-
-                elif counter > 3:
-                    data = str(x).split()
-                    for value in data:
-                        a = float(value)
-                        acc_data.append(a)
-                    acc = np.asarray(acc_data)
-                counter = counter + 1
-
-        t = []  # save time history
-        for i in range(0, len(acc_data)):
-            ti = i * dt
-            t.append(ti)
+        # Acceleration values
+        acc = np.array([])
+        for line in acc_data:
+            acc = np.append(acc, np.array(line.split(), dtype=float))
+        dur = len(acc) * dt
+        t = np.arange(0, dur, dt)
 
         if outFilename is not None:
             np.savetxt(outFilename, acc, fmt='%1.4e')
 
-        npts = int(npts)
         return dt, npts, desc, t, acc
 
-    except:
-        print("processMotion FAILED!: The record file is not in the directory")
-        print(inFilename)
+    except BaseException as error:
+        print(f"Record file reader FAILED for {inFilename}: ", error)
+
 
 def ReadESM(inFilename=None, content=None, outFilename=None):
     """
@@ -659,12 +646,8 @@ def ReadESM(inFilename=None, content=None, outFilename=None):
         desc = content[:64]
         dt = float(difflib.get_close_matches('SAMPLING_INTERVAL_S', content)[0].split()[1])
         npts = len(content[64:])
-        acc = []
-
-        for i in range(64, len(content)):
-            acc.append(float(content[i]))
-
-        acc = np.asarray(acc)
+        acc_data = content[64:]
+        acc = np.asarray([float(data) for data in acc_data], dtype=float)
         dur = len(acc) * dt
         t = np.arange(0, dur, dt)
         acc = acc / 980.655  # cm/s**2 to g
@@ -674,9 +657,9 @@ def ReadESM(inFilename=None, content=None, outFilename=None):
 
         return dt, npts, desc, t, acc
 
-    except:
-        print("processMotion FAILED!: The record file is not in the directory")
-        print(inFilename)
+    except BaseException as error:
+        print(f"Record file reader FAILED for {inFilename}: ", error)
+
 
 #############################################################################################
 ################### Methods to create building code design spectra ##########################
@@ -760,11 +743,11 @@ def Sae_ec8_part1(ag, xi, T, ImpClass, Type, SiteClass):
 
     Sae = []
     for i in range(len(T)):
-        if T[i] >= 0 and T[i] <= Tb:
+        if 0 <= T[i] <= Tb:
             Sa_el = ag * S * (1.0 + T[i] / Tb * (2.5 * eta - 1.0))
-        elif T[i] >= Tb and T[i] <= Tc:
+        elif Tb <= T[i] <= Tc:
             Sa_el = ag * S * 2.5 * eta
-        elif T[i] >= Tc and T[i] <= Td:
+        elif Tc <= T[i] <= Td:
             Sa_el = ag * S * 2.5 * eta * (Tc / T[i])
         elif T[i] >= Td:
             Sa_el = ag * S * 2.5 * eta * (Tc * Td / T[i] / T[i])
@@ -776,6 +759,7 @@ def Sae_ec8_part1(ag, xi, T, ImpClass, Type, SiteClass):
     Sae = np.array(Sae)
 
     return Sae
+
 
 def Sae_asce7_16(T, SDS, SD1, TL):
     """
@@ -809,20 +793,21 @@ def Sae_asce7_16(T, SDS, SD1, TL):
 
     import numpy as np
 
-    T0=0.2*(SD1/SDS)
-    TS=SD1/SDS
-    Sae=np.zeros(len(T))
+    T0 = 0.2 * (SD1 / SDS)
+    TS = SD1 / SDS
+    Sae = np.zeros(len(T))
     for i in range(len(T)):
-        if T[i]<T0:
-            Sae[i]=SDS*(0.4+0.6*T[i]/T0)
-        if T0<=T[i] and T[i]<=TS:
-            Sae[i]=SDS
-        if TS<=T[i] and T[i]<=TL:
-            Sae[i]=SD1/T[i]
-        if TL<T[i]:
-            Sae[i]=(SD1*TL)/(T[i]**2)
+        if T[i] < T0:
+            Sae[i] = SDS * (0.4 + 0.6 * T[i] / T0)
+        if T0 <= T[i] <= TS:
+            Sae[i] = SDS
+        if TS <= T[i] <= TL:
+            Sae[i] = SD1 / T[i]
+        if TL < T[i]:
+            Sae[i] = (SD1 * TL) / (T[i] ** 2)
 
     return Sae
+
 
 def SiteParam_asce7_16(Lat, Long, RiskCat, SiteClass):
     """
@@ -890,6 +875,7 @@ def SiteParam_asce7_16(Lat, Long, RiskCat, SiteClass):
     SD1 = (2 / 3) * Sm1
 
     return SDS, SD1, TL
+
 
 def SiteParam_tbec2018(Lat, Long, DD, SiteClass):
     """
@@ -993,23 +979,23 @@ def SiteParam_tbec2018(Lat, Long, DD, SiteClass):
     # Local soil response coefficient for the short period region
     if SS <= SoilParam['SS'][0]:
         FS = SoilParam['FS'][SiteClass][0]
-    elif SS > SoilParam['SS'][0] and SS <= SoilParam['SS'][1]:
+    elif SoilParam['SS'][0] < SS <= SoilParam['SS'][1]:
         FS = (SoilParam['FS'][SiteClass][1] - SoilParam['FS'][SiteClass][0]) \
              * (SS - SoilParam['SS'][0]) / (SoilParam['SS'][1] - SoilParam['SS'][0]) \
              + SoilParam['FS'][SiteClass][0]
-    elif SS > SoilParam['SS'][1] and SS <= SoilParam['SS'][2]:
+    elif SoilParam['SS'][1] < SS <= SoilParam['SS'][2]:
         FS = (SoilParam['FS'][SiteClass][2] - SoilParam['FS'][SiteClass][1]) \
              * (SS - SoilParam['SS'][1]) / (SoilParam['SS'][2] - SoilParam['SS'][1]) \
              + SoilParam['FS'][SiteClass][1]
-    elif SS > SoilParam['SS'][2] and SS <= SoilParam['SS'][3]:
+    elif SoilParam['SS'][2] < SS <= SoilParam['SS'][3]:
         FS = (SoilParam['FS'][SiteClass][3] - SoilParam['FS'][SiteClass][2]) \
              * (SS - SoilParam['SS'][2]) / (SoilParam['SS'][3] - SoilParam['SS'][2]) \
              + SoilParam['FS'][SiteClass][2]
-    elif SS > SoilParam['SS'][3] and SS <= SoilParam['SS'][4]:
+    elif SoilParam['SS'][3] < SS <= SoilParam['SS'][4]:
         FS = (SoilParam['FS'][SiteClass][4] - SoilParam['FS'][SiteClass][3]) \
              * (SS - SoilParam['SS'][3]) / (SoilParam['SS'][4] - SoilParam['SS'][3]) \
              + SoilParam['FS'][SiteClass][3]
-    elif SS > SoilParam['SS'][4] and SS <= SoilParam['SS'][5]:
+    elif SoilParam['SS'][4] < SS <= SoilParam['SS'][5]:
         FS = (SoilParam['FS'][SiteClass][5] - SoilParam['FS'][SiteClass][4]) \
              * (SS - SoilParam['SS'][4]) / (SoilParam['SS'][5] - SoilParam['SS'][4]) \
              + SoilParam['FS'][SiteClass][4]
@@ -1019,23 +1005,23 @@ def SiteParam_tbec2018(Lat, Long, DD, SiteClass):
     # Local soil response coefficient for 1.0 second period
     if S1 <= SoilParam['S1'][0]:
         F1 = SoilParam['F1'][SiteClass][0]
-    elif S1 > SoilParam['S1'][0] and S1 <= SoilParam['S1'][1]:
+    elif SoilParam['S1'][0] < S1 <= SoilParam['S1'][1]:
         F1 = (SoilParam['F1'][SiteClass][1] - SoilParam['F1'][SiteClass][0]) \
              * (S1 - SoilParam['S1'][0]) / (SoilParam['S1'][1] - SoilParam['S1'][0]) \
              + SoilParam['F1'][SiteClass][0]
-    elif S1 > SoilParam['S1'][1] and S1 <= SoilParam['S1'][2]:
+    elif SoilParam['S1'][1] < S1 <= SoilParam['S1'][2]:
         F1 = (SoilParam['F1'][SiteClass][2] - SoilParam['F1'][SiteClass][1]) \
              * (S1 - SoilParam['S1'][1]) / (SoilParam['S1'][2] - SoilParam['S1'][1]) \
              + SoilParam['F1'][SiteClass][1]
-    elif S1 > SoilParam['S1'][2] and S1 <= SoilParam['S1'][3]:
+    elif SoilParam['S1'][2] < S1 <= SoilParam['S1'][3]:
         F1 = (SoilParam['F1'][SiteClass][3] - SoilParam['F1'][SiteClass][2]) \
              * (S1 - SoilParam['S1'][2]) / (SoilParam['S1'][3] - SoilParam['S1'][2]) \
              + SoilParam['F1'][SiteClass][2]
-    elif S1 > SoilParam['S1'][3] and S1 <= SoilParam['S1'][4]:
+    elif SoilParam['S1'][3] < S1 <= SoilParam['S1'][4]:
         F1 = (SoilParam['F1'][SiteClass][4] - SoilParam['F1'][SiteClass][3]) \
              * (S1 - SoilParam['S1'][3]) / (SoilParam['S1'][4] - SoilParam['S1'][3]) \
              + SoilParam['F1'][SiteClass][3]
-    elif S1 > SoilParam['S1'][4] and S1 <= SoilParam['S1'][5]:
+    elif SoilParam['S1'][4] < S1 <= SoilParam['S1'][5]:
         F1 = (SoilParam['F1'][SiteClass][5] - SoilParam['F1'][SiteClass][4]) \
              * (S1 - SoilParam['S1'][4]) / (SoilParam['S1'][5] - SoilParam['S1'][4]) \
              + SoilParam['F1'][SiteClass][4]
@@ -1047,6 +1033,7 @@ def SiteParam_tbec2018(Lat, Long, DD, SiteClass):
     TL = 6
 
     return PGA, SDS, SD1, TL
+
 
 def Sae_tbec2018(T, PGA, SDS, SD1, TL):
     """
@@ -1100,6 +1087,7 @@ def Sae_tbec2018(T, PGA, SDS, SD1, TL):
 
     return Sae
 
+
 #############################################################################################
 ################### Methods to check GMPEs implemented in OpenQuake #########################
 #############################################################################################
@@ -1128,11 +1116,12 @@ def get_available_gmpes():
 
     return gmpes
 
+
 def check_gmpe_attributes(gmpe):
     """
     Details
     -------
-    Checks the attributes for gmpe.
+    Checks the attributes for ground motion prediction equation (gmpe).
 
     Parameters
     ----------
@@ -1146,22 +1135,27 @@ def check_gmpe_attributes(gmpe):
 
     from openquake.hazardlib import gsim
 
-    bgmpe = gsim.get_available_gsims()[gmpe]()
-    print('GMPE name: %s' % gmpe)
-    print('Supported tectonic region: %s' % bgmpe.DEFINED_FOR_TECTONIC_REGION_TYPE)
-    print(
-        'Supported standard deviation: %s' % ', '.join([std for std in bgmpe.DEFINED_FOR_STANDARD_DEVIATION_TYPES]))
-    print('Supported intensity measure: %s' % ', '.join(
-        [imt.__name__ for imt in bgmpe.DEFINED_FOR_INTENSITY_MEASURE_TYPES]))
-    print('Supported intensity measure component: %s' % bgmpe.DEFINED_FOR_INTENSITY_MEASURE_COMPONENT)
+    try:  # this is smth like self.bgmpe = gsim.boore_2014.BooreEtAl2014()
+        oq_gmpe = gsim.get_available_gsims()[gmpe]()
+    except KeyError:
+        print(f'{gmpe} is not a valid gmpe name')
+        raise
+
+    print(f"GMPE name: {gmpe}")
+    print(f"Supported tectonic region: {oq_gmpe.DEFINED_FOR_TECTONIC_REGION_TYPE.name}")
+    print(f"Supported standard deviation: {', '.join([std for std in oq_gmpe.DEFINED_FOR_STANDARD_DEVIATION_TYPES])}")
+    print(f"Supported intensity measure: "
+          f"{', '.join([imt.__name__ for imt in oq_gmpe.DEFINED_FOR_INTENSITY_MEASURE_TYPES])}")
+    print(f"Supported intensity measure component: {oq_gmpe.DEFINED_FOR_INTENSITY_MEASURE_COMPONENT.name}")
     try:
-        sa_keys = list(bgmpe.COEFFS.sa_coeffs.keys())
-        print('Supported SA period range: %s' % ' - '.join([str(sa_keys[0].period), str(sa_keys[-1].period)]))
-    except:
+        sa_keys = list(oq_gmpe.COEFFS.sa_coeffs.keys())
+        print(f"Supported SA period range: {' - '.join([str(sa_keys[0].period), str(sa_keys[-1].period)])}")
+    except IndexError:
         pass
-    print('Required distance parameters: %s' % ', '.join([dist for dist in bgmpe.REQUIRES_DISTANCES]))
-    print('Required rupture parameters: %s' % ', '.join([rup for rup in bgmpe.REQUIRES_RUPTURE_PARAMETERS]))
-    print('Required site parameters: %s' % ', '.join([site for site in bgmpe.REQUIRES_SITES_PARAMETERS]))
+    print(f"Required distance parameters: {', '.join([dist for dist in oq_gmpe.REQUIRES_DISTANCES])}")
+    print(f"Required rupture parameters: {', '.join([rup for rup in oq_gmpe.REQUIRES_RUPTURE_PARAMETERS])}")
+    print(f"Required site parameters: {', '.join([site for site in oq_gmpe.REQUIRES_SITES_PARAMETERS])}")
+
 
 #############################################################################################
 ###################               Other utility methods             #########################
@@ -1206,6 +1200,7 @@ def get_esm_token(username, pwd):
 
     os.system(command)
 
+
 def create_dir(dir_path):
     """
     Details
@@ -1225,7 +1220,7 @@ def create_dir(dir_path):
     import shutil
     import stat
 
-    def handleRemoveReadonly(func, path, exc):
+    def handle_remove_read_only(func, path, exc):
         excvalue = exc[1]
         if func in (os.rmdir, os.remove) and excvalue.errno == errno.EACCES:
             os.chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)  # 0777
@@ -1235,8 +1230,9 @@ def create_dir(dir_path):
                           "It cannot be recreated.")
 
     if os.path.exists(dir_path):
-        shutil.rmtree(dir_path, ignore_errors=False, onerror=handleRemoveReadonly)
+        shutil.rmtree(dir_path, ignore_errors=False, onerror=handle_remove_read_only)
     os.makedirs(dir_path)
+
 
 def run_time(start_time):
     """
@@ -1264,4 +1260,4 @@ def run_time(start_time):
     time_hours = int(time_seconds / 3600)
     time_minutes = int(time_minutes - time_hours * 60)
     time_seconds = time_seconds - time_minutes * 60 - time_hours * 3600
-    print("Run time: %d hours: %d minutes: %.2f seconds" % (time_hours, time_minutes, time_seconds))
+    print(f"Run time: {time_hours:.0f} hours: {time_minutes:.0f} minutes: {time_seconds:.2f} seconds")

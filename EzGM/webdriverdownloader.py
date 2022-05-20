@@ -23,6 +23,7 @@ import sys
 
 logger = logging.getLogger(__name__)
 
+
 class WebDriverDownloaderBase:
     """Abstract Base Class for the different web driver downloaders
     """
@@ -247,7 +248,8 @@ class GeckoDriverDownloader(WebDriverDownloaderBase):
         if version == "latest":
             info = requests.get(self.gecko_driver_releases_api_url + version)
             if info.status_code != 200:
-                info_message = "Error attempting to get version info via API, got status code: {0}".format(info.status_code)
+                info_message = "Error attempting to get version info via API, got status code: {0}".format(
+                    info.status_code)
                 logger.info(info_message)
                 resp = requests.get(self.gecko_driver_releases_ui_url + version)
                 if resp.status_code == 200:
@@ -281,7 +283,7 @@ class GeckoDriverDownloader(WebDriverDownloaderBase):
         info = requests.get(gecko_driver_version_release_api_url)
         if info.status_code != 200:
             info_message = "Error, unable to get info for gecko driver {0} release. Status code: {1}".format(
-                    version, info.status_code)
+                version, info.status_code)
             logger.info(info_message)
             resp = requests.get(gecko_driver_version_release_ui_url, allow_redirects=True)
             if resp.status_code == 200:
@@ -314,7 +316,7 @@ class GeckoDriverDownloader(WebDriverDownloaderBase):
         if len(filename) > 1:
             filename = [name for name in filenames if os_name + bitness in name]
             for file in filename:
-                if '.asc' in file and os_name=='linux':
+                if '.asc' in file and os_name == 'linux':
                     filename.remove(file)
             if len(filename) != 1:
                 info_message = "Error, unable to determine correct filename for {0}bit {1}".format(bitness, os_name)
@@ -336,7 +338,8 @@ class ChromeDriverDownloader(WebDriverDownloaderBase):
     def _get_latest_version_number(self):
         resp = requests.get(self.chrome_driver_base_url + '/o/LATEST_RELEASE')
         if resp.status_code != 200:
-            error_message = "Error, unable to get version number for latest release, got code: {0}".format(resp.status_code)
+            error_message = "Error, unable to get version number for latest release, got code: {0}".format(
+                resp.status_code)
             logger.error(error_message)
             raise RuntimeError(error_message)
         latest_release = requests.get(resp.json()['mediaLink'])
@@ -405,6 +408,7 @@ class ChromeDriverDownloader(WebDriverDownloaderBase):
             result = [item for item in matching_versions if os_name + bitness in item['name']][0]['mediaLink']
 
         return result
+
 
 def get_architecture_bitness() -> str:
     """

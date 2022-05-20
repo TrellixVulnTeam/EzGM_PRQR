@@ -18,7 +18,7 @@ cs = conditional_spectrum(database='NGA_W2', outdir='Outputs_A')
 # check the attributes of gmpe to use 'AkkarEtAlRjb2014'
 check_gmpe_attributes(gmpe='AkkarEtAlRjb2014')
 
-# Note that intensity measure compoentn is IMC.GEOMETRIC_MEAN:Geometric mean of two horizontal components
+# Note that intensity measure component is GEOMETRIC_MEAN:Geometric mean of two horizontal components
 cs.create(Tstar=0.5, gmpe='AkkarEtAlRjb2014', selection=1, Sa_def='GeoMean', 
           site_param={'vs30': 500}, rup_param={'rake': [0.0], 'mag': [7.5]},
           dist_param={'rjb': [10]}, Hcont=None, T_Tgt_range=[0.1, 4.0],
@@ -37,7 +37,7 @@ cs.plot(tgt=0, sim=1, rec=1, save=1, show=0)
 
 # A.4) If database == 'NGA_W2' you can first download the records via nga_download method
 # from NGA-West2 Database [http://ngawest2.berkeley.edu/] and then use write method
-cs.ngaw2_download('example_username@email.com', pwd = 'example_password123456', sleeptime=3, browser='firefox')
+cs.ngaw2_download('example_username@email.com', pwd = 'example_password123456', sleeptime=2, browser='firefox')
 
 # A.5) If you have records already inside recs_f\database.zip\database or
 # downloaded records for database = NGA_W2 case, write whatever you want,
@@ -58,7 +58,7 @@ cs = conditional_spectrum(database='ESM_2018', outdir='Outputs_B')
 # check the attributes of gmpe to use 'AkkarEtAlRjb2014'
 check_gmpe_attributes(gmpe='AkkarEtAlRjb2014')
 
-# Note that intensity measure component is IMC.GEOMETRIC_MEAN: Geometric mean of two horizontal components
+# Note that intensity measure component is GEOMETRIC_MEAN:Geometric mean of two horizontal components
 cs.create(Tstar=0.5, gmpe='AkkarEtAlRjb2014', selection=1, Sa_def='GeoMean', 
           site_param={'vs30': 500}, rup_param={'rake': [0.0], 'mag': [7.5]},
           dist_param={'rjb': [10]}, Hcont=None, T_Tgt_range=[0.1, 4.0],
@@ -105,6 +105,7 @@ cs = conditional_spectrum(database='NGA_W2', outdir='Outputs_C')
 check_gmpe_attributes(gmpe='BooreEtAl2014')
 
 # create the target spectrum by inserting necessary atribute info
+# Note that intensity measure component is RotD50
 cs.create(Tstar=np.arange(0.2, 2.4, 0.2), gmpe='BooreEtAl2014', selection=1, Sa_def='RotD50', 
           site_param={'vs30': 620}, rup_param={'rake': [0.0, 0.0], 'mag': [6.5, 6.0]},
           dist_param={'rjb': [20, 30]}, Hcont=None, T_Tgt_range=[0.1, 4.5],
@@ -123,7 +124,7 @@ cs.plot(tgt=0, sim=1, rec=1, save=1, show=1)
 
 # C.4) If database == 'NGA_W2' you can first download the records via nga_download method
 # from NGA-West2 Database [http://ngawest2.berkeley.edu/] and then use write method
-cs.ngaw2_download(username = 'example_username@email.com', pwd = 'example_password123456', sleeptime = 3, browser = 'firefox')
+cs.ngaw2_download(username = 'example_username@email.com', pwd = 'example_password123456', sleeptime = 2, browser = 'firefox')
 
 # C.5) If you have records already inside recs_f\database.zip\database or
 # downloaded records for database = NGA_W2 case, write whatever you want,

@@ -231,7 +231,7 @@ class _subclass_:
             # set the directories and file names
             try:  # this will work if records are downloaded
                 zipName = self.Unscaled_rec_file
-            except:
+            except AttributeError:
                 zipName = os.path.join(recs_f, self.database['Name'] + '.zip')
             n = len(self.rec_h1)
             path_dts = os.path.join(self.outdir, 'GMR_dts.txt')
@@ -264,10 +264,12 @@ class _subclass_:
                 # Read the record files
                 if self.database['Name'].startswith('NGA'):  # NGA
                     dts[i], npts1, _, _, inp_acc1 = ReadNGA(inFilename=self.rec_h1[i], content=contents1[i])
-                    gmr_file1 = self.rec_h1[i].replace('/', '_')[:-4] + '_SF_' + "{:.3f}".format(self.rec_scale[i]) + '.txt'
+                    gmr_file1 = self.rec_h1[i].replace('/', '_')[:-4] + '_SF_' + "{:.3f}".format(
+                        self.rec_scale[i]) + '.txt'
                     if self.selection == 2:  # H2 component
                         _, npts2, _, _, inp_acc2 = ReadNGA(inFilename=self.rec_h2[i], content=contents2[i])
-                        gmr_file2 = self.rec_h2[i].replace('/', '_')[:-4] + '_SF_' + "{:.3f}".format(self.rec_scale[i]) + '.txt'
+                        gmr_file2 = self.rec_h2[i].replace('/', '_')[:-4] + '_SF_' + "{:.3f}".format(
+                            self.rec_scale[i]) + '.txt'
 
                 elif self.database['Name'].startswith('ESM'):  # ESM
                     dts[i], npts1, _, _, inp_acc1 = ReadESM(inFilename=self.rec_h1[i], content=contents1[i])
@@ -317,7 +319,7 @@ class _subclass_:
             with open(path_obj, 'wb') as file:
                 pickle.dump(obj, file)
 
-        print('Finished writing process, the files are located in\n%s' % self.outdir)
+        print(f"Finished writing process, the files are located in\n{self.outdir}")
 
     def plot(self, tgt=0, sim=0, rec=1, save=0, show=1):
         """
@@ -534,10 +536,6 @@ class _subclass_:
                 if save == 1:
                     plt.savefig(os.path.join(self.outdir, 'Selected.pdf'))
 
-            # Show the figure
-            if show == 1:
-                plt.show()
-
         if type(self).__name__ == 'code_spectrum':
 
             hatch = [self.Tlower, self.Tupper]
@@ -545,7 +543,8 @@ class _subclass_:
             fig, ax = plt.subplots(1, 1, figsize=(8, 8))
             for i in range(self.rec_spec.shape[0]):
                 ax.plot(self.T, self.rec_spec[i, :] * self.rec_scale[i], color='gray', lw=1, label='Selected')
-            ax.plot(self.T, np.mean(self.rec_spec * self.rec_scale.reshape(-1,1), axis=0), color='black', lw=2, label='Selected Mean')
+            ax.plot(self.T, np.mean(self.rec_spec * self.rec_scale.reshape(-1, 1), axis=0), color='black', lw=2,
+                    label='Selected Mean')
 
             if self.code == 'TBEC 2018':
                 ax.plot(self.T, self.target, color='red', lw=2, label='Design Response Spectrum')
@@ -570,14 +569,14 @@ class _subclass_:
             by_label = dict(zip(labels, handles))
             ax.legend(by_label.values(), by_label.keys(), frameon=False)
             ax.set_xlim([self.T[0], self.Tupper * 2])
-            plt.suptitle('Spectra of Selected Records (%s)' % self.code, y=0.95)
+            plt.suptitle(f'Spectra of Selected Records ({self.code})', y=0.95)
 
             if save == 1:
                 plt.savefig(os.path.join(self.outdir, 'Selected.pdf'))
 
-            # Show the figure
-            if show == 1:
-                plt.show()
+        # Show the figure
+        if show == 1:
+            plt.show()
 
         plt.close('all')
 
@@ -807,10 +806,11 @@ class _subclass_:
 
                 print('Webdriver is obtained successfully.')
 
-            except:
-                raise RuntimeError('Failed to get webdriver.')
+                return driver
 
-            return driver
+            except RuntimeError:
+                print('Failed to get webdriver.')
+                raise
 
         def sign_in(driver, USERNAME, PASSWORD):
             """
@@ -844,8 +844,9 @@ class _subclass_:
             try:
                 alert = driver.find_element_by_css_selector('p.alert')
                 warn = alert.text
-            except:
+            except BaseException as e:
                 warn = None
+                print(e)
 
             if str(warn) == 'Invalid email or password.':
                 driver.quit()
@@ -891,8 +892,9 @@ class _subclass_:
             try:
                 note = driver.find_element_by_id('notice').text
                 print(note)
-            except:
+            except BaseException as e:
                 note = 'NO'
+                error = e
 
             if 'NO' in note:
                 driver.set_window_size(800, 800)
@@ -1144,7 +1146,7 @@ class conditional_spectrum(_subclass_):
         0.388023676 0.387127235 0.379463066 0.368779338 0.346769536 0.297351745 0.290136746 0.283841030 0.282668509 0.286648955 0.282976017 0.271795167 0.276053857 0.287580691 0.299876324 0.308003502 0.308869052 0.317595706 0.327063915 0.338303391 0.343260457 0.364472634 0.373069949 0.383166929 0.397753600 0.408583246 0.417351819 0.432274411 0.443049297 0.450877709 0.467548386 0.485384263 0.519094244 0.543168691 0.560578412 0.566198740 0.579314389 0.605167550 0.626871803 0.649062742 0.671466883 0.690121946 0.717967558 0.738669004 0.762772025 0.779529183 0.793789262 0.809170358 0.824522815 0.838230714 0.846539221 0.855151540 0.882650968 0.909276123 0.933929338 0.950884209 0.967271742 0.981867206 0.994161539 1.000000000 0.994786494 0.982542990
         0.374414280 0.374517227 0.366941903 0.357389576 0.335928741 0.290186844 0.282338477 0.277461634 0.276289052 0.279832113 0.276909997 0.265717553 0.270090412 0.280332211 0.290794284 0.297064428 0.296407372 0.299746833 0.309826727 0.321379107 0.325705273 0.345928556 0.353855693 0.363913564 0.376298229 0.385674105 0.395571593 0.411058267 0.422456988 0.429516192 0.446761605 0.465544137 0.500329740 0.526976523 0.544366449 0.551510187 0.564841776 0.589955841 0.611834493 0.633832190 0.655909098 0.673817186 0.700891537 0.720369328 0.743974698 0.760413104 0.774388186 0.789750612 0.803606701 0.816197107 0.825195593 0.834216891 0.861796234 0.890558074 0.916174312 0.934166833 0.951464983 0.966916287 0.982017362 0.994786494 1.000000000 0.994598788
         0.327591227 0.327475695 0.319627396 0.309845437 0.287061335 0.244808717 0.246124740 0.243767437 0.246189710 0.251575366 0.249258668 0.239620288 0.245635104 0.255837514 0.264918559 0.271319428 0.267233297 0.264459231 0.276507212 0.286839305 0.290190152 0.306793984 0.313364781 0.322319411 0.334237875 0.343985400 0.354611000 0.368638617 0.380051200 0.387956859 0.405181228 0.425482934 0.465522040 0.492870578 0.510064415 0.517257200 0.530236122 0.553791800 0.575691608 0.595807459 0.616808159 0.635307705 0.664055282 0.684394961 0.706169171 0.721304101 0.734778759 0.750310219 0.763724118 0.777354214 0.788230830 0.798942709 0.830129231 0.863419172 0.891643991 0.911343164 0.931015807 0.948046812 0.965411448 0.982542990 0.994598788 1.000000000
-        """ , dtype=float, sep=" ").reshape(-1, len(periods))
+        """, dtype=float, sep=" ").reshape(-1, len(periods))
 
         if np.any([T1, T2] < periods[0]) or \
                 np.any([T1, T2] > periods[-1]):
@@ -1217,17 +1219,20 @@ class conditional_spectrum(_subclass_):
         """
 
         # Model coefficient values from Table 1 of the above-reference paper
-        periods_orig = np.array([0.0100000000000000, 0.0200000000000000, 0.0300000000000000, 0.0500000000000000, 0.0750000000000000,
-                        0.100000000000000, 0.150000000000000, 0.200000000000000, 0.250000000000000, 0.300000000000000,
-                        0.400000000000000, 0.500000000000000, 0.750000000000000, 1, 1.50000000000000, 2, 3, 4, 5,
-                        7.50000000000000, 10])
-        ratios_orig = np.array([1.19243805900000, 1.19124621700000, 1.18767783300000, 1.18649074900000, 1.18767783300000,
-                       1.18767783300000, 1.19961419400000, 1.20562728500000, 1.21652690500000, 1.21896239400000,
-                       1.22875320400000, 1.22875320400000, 1.23738465100000, 1.24110237900000, 1.24234410200000,
-                       1.24358706800000, 1.24732343100000, 1.25985923900000, 1.264908769000, 1.28531008400000,
-                       1.29433881900000])
-        sigma_orig = np.array([0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08,
-                      0.08, 0.08, 0.08, 0.08])
+        periods_orig = np.array(
+            [0.0100000000000000, 0.0200000000000000, 0.0300000000000000, 0.0500000000000000, 0.0750000000000000,
+             0.100000000000000, 0.150000000000000, 0.200000000000000, 0.250000000000000, 0.300000000000000,
+             0.400000000000000, 0.500000000000000, 0.750000000000000, 1, 1.50000000000000, 2, 3, 4, 5,
+             7.50000000000000, 10])
+        ratios_orig = np.array(
+            [1.19243805900000, 1.19124621700000, 1.18767783300000, 1.18649074900000, 1.18767783300000,
+             1.18767783300000, 1.19961419400000, 1.20562728500000, 1.21652690500000, 1.21896239400000,
+             1.22875320400000, 1.22875320400000, 1.23738465100000, 1.24110237900000, 1.24234410200000,
+             1.24358706800000, 1.24732343100000, 1.25985923900000, 1.264908769000, 1.28531008400000,
+             1.29433881900000])
+        sigma_orig = np.array(
+            [0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08,
+             0.08, 0.08, 0.08, 0.08])
 
         # Interpolate to compute values for the user-specified periods
         f = interpolate.interp1d(np.log(periods_orig), ratios_orig)(np.log(T))
@@ -1269,14 +1274,15 @@ class conditional_spectrum(_subclass_):
 
         # Get the GMPE output
         for i in range(n):
-            mu_lnSaT[i], stddvs_lnSa = self.bgmpe.get_mean_and_stddevs(sctx, rctx, dctx, imt.SA(period=self.Tstar[i]), [const.StdDev.TOTAL])
+            mu_lnSaT[i], stddvs_lnSa = self.bgmpe.get_mean_and_stddevs(sctx, rctx, dctx, imt.SA(period=self.Tstar[i]),
+                                                                       [const.StdDev.TOTAL])
             sigma_lnSaT[i] = stddvs_lnSa[0]
 
             # modify spectral targets if RotD100 values were specified for two-component selection
             if self.Sa_def == 'RotD100' and not 'RotD100' in self.bgmpe.DEFINED_FOR_INTENSITY_MEASURE_COMPONENT and self.selection == 2:
                 rotD100Ratio, rotD100Sigma = self._gmpe_sb_2014_ratios(self.Tstar[i])
                 mu_lnSaT[i] = mu_lnSaT[i] + np.log(rotD100Ratio)
-                sigma_lnSaT[i] = (sigma_lnSaT[i]**2 + rotD100Sigma**2) ** 0.5
+                sigma_lnSaT[i] = (sigma_lnSaT[i] ** 2 + rotD100Sigma ** 2) ** 0.5
 
             for j in range(n):
                 rho = self._get_correlation(self.Tstar[i], self.Tstar[j])
@@ -1291,7 +1297,8 @@ class conditional_spectrum(_subclass_):
 
         Sa_avg_std = Sa_avg_std * (1 / n) ** 2
 
-        # compute mean of logarithmic average spectral acceleration and logarithmic standard deviation of spectral acceleration prediction
+        # compute mean of logarithmic average spectral acceleration and logarithmic standard deviation of spectral
+        # acceleration prediction
         mu_lnSaTstar = Sa_avg_meanLn
         sigma_lnSaTstar = np.sqrt(Sa_avg_std)
 
@@ -1415,8 +1422,9 @@ class conditional_spectrum(_subclass_):
             self.bgmpe = gsim.get_available_gsims()[gmpe]()
             self.gmpe = gmpe
 
-        except:
-            raise KeyError('Not a valid gmpe')
+        except KeyError:
+            print(f'{gmpe} is not a valid gmpe name')
+            raise
 
         # These modifications are required for OpenQuake version > 3.13, as indicated by Michele in OQ forum
         # Even if GMM does not require rrup per se, the engine still requires it for filtering the far away ruptures.
@@ -1440,8 +1448,8 @@ class conditional_spectrum(_subclass_):
         self.rup_param = rup_param
         self.dist_param = dist_param
 
-        nScenarios = len(rup_param['mag']) # number of scenarios
-        if Hcont is None: # equal for all
+        nScenarios = len(rup_param['mag'])  # number of scenarios
+        if Hcont is None:  # equal for all
             self.Hcont = [1 / nScenarios for _ in range(nScenarios)]
         else:
             self.Hcont = Hcont
@@ -1476,7 +1484,7 @@ class conditional_spectrum(_subclass_):
 
             # Set the contexts for the scenario
             sctx = gsim.base.SitesContext()
-            for key in site_param.keys(): # Site parameters are constant for each scenario
+            for key in site_param.keys():  # Site parameters are constant for each scenario
                 if isinstance(site_param[key], bool):
                     temp = np.array([site_param[key]])
                 else:
@@ -1495,7 +1503,8 @@ class conditional_spectrum(_subclass_):
 
             for i in range(len(self.T)):
                 # Get the GMPE ouput for a rupture scenario
-                mu, sigma = self.bgmpe.get_mean_and_stddevs(sctx, rctx, dctx, imt.SA(period=self.T[i]),[const.StdDev.TOTAL])
+                mu, sigma = self.bgmpe.get_mean_and_stddevs(sctx, rctx, dctx, imt.SA(period=self.T[i]),
+                                                            [const.StdDev.TOTAL])
                 mu_lnSaT[i] = mu
                 sigma_lnSaT[i] = sigma[0]
                 # modify spectral targets if RotD100 values were specified for two-component selection:
@@ -1877,11 +1886,11 @@ class conditional_spectrum(_subclass_):
             if medianErr < self.tol and stdErr < self.tol:
                 break
         print('Ground motion selection is finished.')
-        print('For T ∈ [%.2f - %.2f]' % (self.T[0], self.T[-1]))
-        print('Max error in median = %.2f %%' % medianErr)
-        print('Max error in standard deviation = %.2f %%' % stdErr)
+        print(f'For T ∈ [{self.T[0]:.2f} - {self.T[-1]:.2f}]')
+        print(f'Max error in median = {medianErr:.2f} %')
+        print(f'Max error in standard deviation = {stdErr:.2f} %')
         if medianErr < self.tol and stdErr < self.tol:
-            print('The errors are within the target %d percent %%' % self.tol)
+            print(f'The errors are within the target {self.tol:d} percent %')
 
         recID = recID.tolist()
         # Add selected record information to self
@@ -1912,7 +1921,7 @@ class code_spectrum(_subclass_):
     """
 
     def __init__(self, database='NGA_W2', outdir='Outputs', target_path=None, nGM=11, selection=1,
-               Mw_lim=None, Vs30_lim=None, Rjb_lim=None, fault_lim=None, opt=1, maxScale=2, RecPerEvent=3):
+                 Mw_lim=None, Vs30_lim=None, Rjb_lim=None, fault_lim=None, opt=1, maxScale=2, RecPerEvent=3):
         """
         Details
         -------
@@ -2079,7 +2088,7 @@ class code_spectrum(_subclass_):
         if self.RecPerEvent > 3:
             print('Warning! Limit for Record Per Event must be at most 3 according to TBEC 2018. Changing...')
             self.RecPerEvent = 3
-        
+
         # Set the period range
         self.Tlower = 0.2 * Tp
         self.Tupper = 1.5 * Tp
@@ -2090,14 +2099,14 @@ class code_spectrum(_subclass_):
         # Determine the elastic design spectrum from the user-defined spectrum
         if self.target_path:
             data = np.loadtxt(self.target_path)
-            intfunc = interpolate.interp1d(data[:,0],data[:,1], kind='linear', fill_value='extrapolate')
+            intfunc = interpolate.interp1d(data[:, 0], data[:, 1], kind='linear', fill_value='extrapolate')
             target_spec = intfunc(self.T)
 
         # Determine the elastic design spectrum from code
         else:
             PGA, SDS, SD1, TL = SiteParam_tbec2018(Lat, Long, DD, SiteClass)
             target_spec = Sae_tbec2018(self.T, PGA, SDS, SD1, TL)
-            
+
         # Consider the lower bound spectrum specified by the code as target spectrum
         if self.selection == 1:
             target_spec = 1.0 * target_spec
@@ -2112,7 +2121,8 @@ class code_spectrum(_subclass_):
         nBig = sampleBig.shape[0]
 
         # Scale factors based on mse
-        scaleFac = np.array(np.sum(np.matlib.repmat(target_spec, nBig, 1) * sampleBig, axis=1) / np.sum(sampleBig ** 2, axis=1))
+        scaleFac = np.array(
+            np.sum(np.matlib.repmat(target_spec, nBig, 1) * sampleBig, axis=1) / np.sum(sampleBig ** 2, axis=1))
 
         # Find best matches to the target spectrum from ground-motion database
         temp = (np.matlib.repmat(target_spec, nBig, 1) - sampleBig) ** 2
@@ -2146,28 +2156,32 @@ class code_spectrum(_subclass_):
         idxs = np.where((self.database['Periods'] >= self.Tlower) * (self.database['Periods'] <= self.Tupper))[0]
 
         if self.opt == 1:
-            self.rec_scale = finalScaleFac * np.max(target_spec[idxs] / (finalScaleFac.reshape(-1,1)*sampleSmall[:,idxs]).mean(axis=0))
+            self.rec_scale = finalScaleFac * np.max(
+                target_spec[idxs] / (finalScaleFac.reshape(-1, 1) * sampleSmall[:, idxs]).mean(axis=0))
 
         # try to optimize scaling factor to make it closest as possible to 1
         if self.opt == 2:
-            finalScaleFac = np.max(target_spec[idxs] / sampleSmall[:,idxs].mean(axis=0))
+            finalScaleFac = np.max(target_spec[idxs] / sampleSmall[:, idxs].mean(axis=0))
             for i in range(self.nGM):  # Loop for nGM
                 # note the ID of the record which is removed
                 minID = recIDs[i]
                 # remove the i'th record search for a candidate, and consider critical periods for error calculations only
-                sampleSmall_reduced = np.delete(sampleSmall[:,idxs], i, 0)
+                sampleSmall_reduced = np.delete(sampleSmall[:, idxs], i, 0)
                 recIDs = np.delete(recIDs, i)
                 eqIDs = np.delete(eqIDs, i)
                 # Try to add a new spectra to the subset list
-                minID, finalScaleFac = self._opt2(sampleSmall_reduced, finalScaleFac, target_spec[idxs], recIDs, eqIDs, minID, nBig, eq_ID, sampleBig[:,idxs], self.RecPerEvent)
+                minID, finalScaleFac = self._opt2(sampleSmall_reduced, finalScaleFac, target_spec[idxs], recIDs, eqIDs,
+                                                  minID, nBig, eq_ID, sampleBig[:, idxs], self.RecPerEvent)
                 # Add new element in the right slot
-                sampleSmall = np.concatenate((sampleSmall[:i, :], sampleBig[minID, :].reshape(1, sampleBig.shape[1]), sampleSmall[i:, :]),axis=0)
+                sampleSmall = np.concatenate(
+                    (sampleSmall[:i, :], sampleBig[minID, :].reshape(1, sampleBig.shape[1]), sampleSmall[i:, :]),
+                    axis=0)
                 recIDs = np.concatenate((recIDs[:i], np.array([minID]), recIDs[i:]))
                 eqIDs = np.concatenate((eqIDs[:i], np.array([eq_ID[minID]]), eqIDs[i:]))
-            self.rec_scale = np.ones(self.nGM)*float(finalScaleFac)
+            self.rec_scale = np.ones(self.nGM) * float(finalScaleFac)
 
         # check the scaling
-        if np.any(self.rec_scale > self.maxScale) or np.any(self.rec_scale < 1/self.maxScale):
+        if np.any(self.rec_scale > self.maxScale) or np.any(self.rec_scale < 1 / self.maxScale):
             raise ValueError('Scaling factor criteria is not satisfied',
                              'Please broaden your selection and scaling criteria or change the optimization scheme...')
 
@@ -2214,7 +2228,7 @@ class code_spectrum(_subclass_):
 
         print('TBEC 2018 based ground motion record selection and amplitude scaling are finished...')
 
-    def asce7_16(self, Lat=34, Long=-118, RiskCat='II', SiteClass='C', T1_small=1, T1_big=1, Tlower = None, Tupper = None):
+    def asce7_16(self, Lat=34, Long=-118, RiskCat='II', SiteClass='C', T1_small=1, T1_big=1, Tlower=None, Tupper=None):
         """
         Details
         -------
@@ -2269,18 +2283,20 @@ class code_spectrum(_subclass_):
         self.RiskCat = RiskCat
         self.SiteClass = SiteClass
         self.code = 'ASCE 7-16'
-        
+
         # Section 16.2.3.1
         if not Tlower:
             Tlower = 0.2 * T1_small
         elif Tlower < 0.2 * T1_small:
             Tlower = 0.2 * T1_small
-            print('Warning! Lower bound cannot be lower than 0.2 times the largest first-mode period according to ASCE 7-16. Changing...')
+            print('Warning! Lower bound cannot be lower than 0.2 times the largest first-mode period according to '
+                  'ASCE 7-16. Changing...')
         if not Tupper:
             Tupper = 2.0 * T1_big
         elif Tupper < 1.5 * T1_big:
             Tupper = 1.5 * T1_big
-            print('Warning! Upper bound cannot be lower than 1.5 times the smallest first-mode period according to ASCE 7-16. Changing...')
+            print('Warning! Upper bound cannot be lower than 1.5 times the smallest first-mode period according to '
+                  'ASCE 7-16. Changing...')
         self.Tlower = Tlower
         self.Tupper = Tupper
 
@@ -2295,27 +2311,29 @@ class code_spectrum(_subclass_):
         # Determine the elastic design spectrum from the user-defined spectrum
         if self.target_path:
             data = np.loadtxt(self.target_path)
-            intfunc = interpolate.interp1d(data[:,0],data[:,1], kind='linear', fill_value='extrapolate')
+            intfunc = interpolate.interp1d(data[:, 0], data[:, 1], kind='linear', fill_value='extrapolate')
             target_spec = intfunc(self.T)
 
         # Determine the elastic design spectrum from code, Section 16.2.1
         else:
-            SDS, SD1, TL = SiteParam_asce7_16(Lat, Long, RiskCat, SiteClass) # Retrieve site parameters
-            target_spec = 1.5*Sae_asce7_16(self.T, SDS, SD1, TL) # Retrive the design spectrum and multiply by 1.5 to get MCER
-        
+            SDS, SD1, TL = SiteParam_asce7_16(Lat, Long, RiskCat, SiteClass)  # Retrieve site parameters
+            target_spec = 1.5 * Sae_asce7_16(self.T, SDS, SD1,
+                                             TL)  # Retrive the design spectrum and multiply by 1.5 to get MCER
+
         # Consider the lower bound spectrum specified by the code as target spectrum, Section 16.2.3.2
         target_spec = 0.9 * target_spec
         if self.selection == 2:
-            self.Sa_def = 'RotD100'                
+            self.Sa_def = 'RotD100'
 
-        # Search the database and filter
+            # Search the database and filter
         sampleBig, Vs30, Mw, Rjb, fault, Filename_1, Filename_2, NGA_num, eq_ID_, station_code = self._search_database()
 
         # Sample size of the filtered database
         nBig = sampleBig.shape[0]
 
         # Scale factors based on mse
-        scaleFac = np.array(np.sum(np.matlib.repmat(target_spec, nBig, 1) * sampleBig, axis=1) / np.sum(sampleBig ** 2, axis=1))
+        scaleFac = np.array(
+            np.sum(np.matlib.repmat(target_spec, nBig, 1) * sampleBig, axis=1) / np.sum(sampleBig ** 2, axis=1))
 
         # Find best matches to the target spectrum from ground-motion database
         temp = (np.matlib.repmat(target_spec, nBig, 1) - sampleBig) ** 2
@@ -2349,28 +2367,32 @@ class code_spectrum(_subclass_):
         idxs = np.where((self.database['Periods'] >= self.Tlower) * (self.database['Periods'] <= self.Tupper))[0]
 
         if self.opt == 1:
-            self.rec_scale = finalScaleFac * np.max(target_spec[idxs] / (finalScaleFac.reshape(-1,1)*sampleSmall[:,idxs]).mean(axis=0))
+            self.rec_scale = finalScaleFac * np.max(
+                target_spec[idxs] / (finalScaleFac.reshape(-1, 1) * sampleSmall[:, idxs]).mean(axis=0))
 
         # try to optimize scaling factor to make it closest as possible to 1
         if self.opt == 2:
-            finalScaleFac = np.max(target_spec[idxs] / sampleSmall[:,idxs].mean(axis=0))
+            finalScaleFac = np.max(target_spec[idxs] / sampleSmall[:, idxs].mean(axis=0))
             for i in range(self.nGM):  # Loop for nGM
                 # note the ID of the record which is removed
                 minID = recIDs[i]
                 # remove the i'th record search for a candidate, and consider critical periods for error calculations only
-                sampleSmall_reduced = np.delete(sampleSmall[:,idxs], i, 0)
+                sampleSmall_reduced = np.delete(sampleSmall[:, idxs], i, 0)
                 recIDs = np.delete(recIDs, i)
                 eqIDs = np.delete(eqIDs, i)
                 # Try to add a new spectra to the subset list
-                minID, finalScaleFac = self._opt2(sampleSmall_reduced, finalScaleFac, target_spec[idxs], recIDs, eqIDs, minID, nBig, eq_ID, sampleBig[:,idxs], self.RecPerEvent)
+                minID, finalScaleFac = self._opt2(sampleSmall_reduced, finalScaleFac, target_spec[idxs], recIDs, eqIDs,
+                                                  minID, nBig, eq_ID, sampleBig[:, idxs], self.RecPerEvent)
                 # Add new element in the right slot
-                sampleSmall = np.concatenate((sampleSmall[:i, :], sampleBig[minID, :].reshape(1, sampleBig.shape[1]), sampleSmall[i:, :]),axis=0)
+                sampleSmall = np.concatenate(
+                    (sampleSmall[:i, :], sampleBig[minID, :].reshape(1, sampleBig.shape[1]), sampleSmall[i:, :]),
+                    axis=0)
                 recIDs = np.concatenate((recIDs[:i], np.array([minID]), recIDs[i:]))
                 eqIDs = np.concatenate((eqIDs[:i], np.array([eq_ID[minID]]), eqIDs[i:]))
-            self.rec_scale = np.ones(self.nGM)*float(finalScaleFac)
+            self.rec_scale = np.ones(self.nGM) * float(finalScaleFac)
 
         # check the scaling
-        if np.any(self.rec_scale > self.maxScale) or np.any(self.rec_scale < 1/self.maxScale):
+        if np.any(self.rec_scale > self.maxScale) or np.any(self.rec_scale < 1 / self.maxScale):
             raise ValueError('Scaling factor criteria is not satisfied',
                              'Please broaden your selection and scaling criteria or change the optimization scheme...')
         recIDs = recIDs.tolist()
@@ -2410,7 +2432,7 @@ class code_spectrum(_subclass_):
         if self.target_path:
             self.target = intfunc(self.T)
         else:
-            self.target = 1.5*Sae_asce7_16(self.T, SDS, SD1, TL)
+            self.target = 1.5 * Sae_asce7_16(self.T, SDS, SD1, TL)
 
         print('ASCE 7-16 based ground motion record selection and amplitude scaling are finished...')
 
@@ -2462,7 +2484,7 @@ class code_spectrum(_subclass_):
         -------
         None.
         """
-        
+
         # Add selection settings to self
         self.Tp = Tp
         self.ag = ag
@@ -2481,13 +2503,13 @@ class code_spectrum(_subclass_):
         # Determine the elastic design spectrum from the user-defined spectrum
         if self.target_path:
             data = np.loadtxt(self.target_path)
-            func = interpolate.interp1d(data[:,0],data[:,1], kind='linear', fill_value='extrapolate')
+            func = interpolate.interp1d(data[:, 0], data[:, 1], kind='linear', fill_value='extrapolate')
             target_spec = func(self.T)
 
         # Determine the elastic design spectrum from code
         else:
             target_spec = Sae_ec8_part1(ag, xi, self.T, ImpClass, Type, SiteClass)
-            
+
         # Consider the lower bound spectrum specified by the code as target spectrum
         target_spec = 0.9 * target_spec  # scale down except for Sa(T[0]) or PGA
         if self.selection == 2:
@@ -2500,7 +2522,8 @@ class code_spectrum(_subclass_):
         nBig = sampleBig.shape[0]
 
         # Scale factors based on mse
-        scaleFac = np.array(np.sum(np.matlib.repmat(target_spec, nBig, 1) * sampleBig, axis=1) / np.sum(sampleBig ** 2, axis=1))
+        scaleFac = np.array(
+            np.sum(np.matlib.repmat(target_spec, nBig, 1) * sampleBig, axis=1) / np.sum(sampleBig ** 2, axis=1))
 
         # Find best matches to the target spectrum from ground-motion database
         temp = (np.matlib.repmat(target_spec, nBig, 1) - sampleBig) ** 2
@@ -2533,31 +2556,35 @@ class code_spectrum(_subclass_):
 
         # Must not be lower than target within the period range, find the indicies for this period range
         idxs = np.where((self.database['Periods'] >= self.Tlower) * (self.database['Periods'] <= self.Tupper))[0]
-        idxs = np.append(0,idxs)  # Add Sa(T=0) or PGA, approximated as Sa(T=0.01)
+        idxs = np.append(0, idxs)  # Add Sa(T=0) or PGA, approximated as Sa(T=0.01)
 
         if self.opt == 1:
-            self.rec_scale = finalScaleFac * np.max(target_spec[idxs] / (finalScaleFac.reshape(-1,1)*sampleSmall[:,idxs]).mean(axis=0))
+            self.rec_scale = finalScaleFac * np.max(
+                target_spec[idxs] / (finalScaleFac.reshape(-1, 1) * sampleSmall[:, idxs]).mean(axis=0))
 
         # try to optimize scaling factor to make it closest as possible to 1
         if self.opt == 2:
-            finalScaleFac = np.max(target_spec[idxs] / sampleSmall[:,idxs].mean(axis=0))
+            finalScaleFac = np.max(target_spec[idxs] / sampleSmall[:, idxs].mean(axis=0))
             for i in range(self.nGM):  # Loop for nGM
                 # note the ID of the record which is removed
                 minID = recIDs[i]
                 # remove the i'th record search for a candidate, and consider critical periods for error calculations only
-                sampleSmall_reduced = np.delete(sampleSmall[:,idxs], i, 0)
+                sampleSmall_reduced = np.delete(sampleSmall[:, idxs], i, 0)
                 recIDs = np.delete(recIDs, i)
                 eqIDs = np.delete(eqIDs, i)
                 # Try to add a new spectra to the subset list
-                minID, finalScaleFac = self._opt2(sampleSmall_reduced, finalScaleFac, target_spec[idxs], recIDs, eqIDs, minID, nBig, eq_ID, sampleBig[:,idxs], self.RecPerEvent)
+                minID, finalScaleFac = self._opt2(sampleSmall_reduced, finalScaleFac, target_spec[idxs], recIDs, eqIDs,
+                                                  minID, nBig, eq_ID, sampleBig[:, idxs], self.RecPerEvent)
                 # Add new element in the right slot
-                sampleSmall = np.concatenate((sampleSmall[:i, :], sampleBig[minID, :].reshape(1, sampleBig.shape[1]), sampleSmall[i:, :]),axis=0)
+                sampleSmall = np.concatenate(
+                    (sampleSmall[:i, :], sampleBig[minID, :].reshape(1, sampleBig.shape[1]), sampleSmall[i:, :]),
+                    axis=0)
                 recIDs = np.concatenate((recIDs[:i], np.array([minID]), recIDs[i:]))
                 eqIDs = np.concatenate((eqIDs[:i], np.array([eq_ID[minID]]), eqIDs[i:]))
-            self.rec_scale = np.ones(self.nGM)*float(finalScaleFac)
+            self.rec_scale = np.ones(self.nGM) * float(finalScaleFac)
 
         # check the scaling
-        if np.any(self.rec_scale > self.maxScale) or np.any(self.rec_scale < 1/self.maxScale):
+        if np.any(self.rec_scale > self.maxScale) or np.any(self.rec_scale < 1 / self.maxScale):
             raise ValueError('Scaling factor criteria is not satisfied',
                              'Please broaden your selection and scaling criteria or change the optimization scheme...')
 
@@ -2590,7 +2617,7 @@ class code_spectrum(_subclass_):
         elif self.selection == 2:
             for rec in self.rec_h1:
                 rec_idxs.append(np.where(self.database['Filename_1'] == rec)[0][0])
-            self.rec_spec = 0.5*(self.database['Sa_1'][rec_idxs, :]+self.database['Sa_2'][rec_idxs, :])
+            self.rec_spec = 0.5 * (self.database['Sa_1'][rec_idxs, :] + self.database['Sa_2'][rec_idxs, :])
 
         # Save the results for whole spectral range
         self.T = self.database['Periods']
