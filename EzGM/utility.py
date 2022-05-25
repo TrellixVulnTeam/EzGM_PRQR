@@ -237,7 +237,7 @@ def disagg_MR(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_rows
                     data = {}
                     data['mag'] = df['mag'][(df['poe'] == poe) & (df['imt'] == imt)]
                     data['dist'] = df['dist'][(df['poe'] == poe) & (df['imt'] == imt)]
-                    data['apoe'] = -np.log(1 - df['rlz0'][(df['poe'] == poe) & (df['imt'] == imt)]) / inv_t
+                    data['apoe'] = -np.log(1 - df.iloc[:, 4][(df['poe'] == poe) & (df['imt'] == imt)]) / inv_t
                     apoe_norm.append(data['apoe'] / data['apoe'].sum())
                     data['apoe_norm'] = apoe_norm[-1]
                     data = pd.DataFrame(data)
@@ -375,7 +375,7 @@ def disagg_MReps(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_r
                     data['mag'] = df['mag'][(df['poe'] == poe) & (df['imt'] == imt)]
                     data['eps'] = df['eps'][(df['poe'] == poe) & (df['imt'] == imt)]
                     data['dist'] = df['dist'][(df['poe'] == poe) & (df['imt'] == imt)]
-                    data['apoe'] = -np.log(1 - df['rlz0'][(df['poe'] == poe) & (df['imt'] == imt)]) / inv_t
+                    data['apoe'] = -np.log(1 - df.iloc[:, 5][(df['poe'] == poe) & (df['imt'] == imt)]) / inv_t
                     apoe_norm.append(np.array(data['apoe'] / data['apoe'].sum()))
                     data['apoe_norm'] = apoe_norm[-1]
                     data = pd.DataFrame(data)
