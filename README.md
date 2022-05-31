@@ -40,6 +40,11 @@ For EzGM examples, see:
 ```
 pip install EzGM
 ```
+- In case of anaconda in windows the following is suggested for installation:
+```
+pip install -r requirements_py38win.txt
+conda install shapely
+```
 ***
 ## Acknowledgements
 Special thanks to Besim Yukselen for his help in the development of ngaw2_download method, and Gerard J. O'Reilly for sharing his knowledge in the field with me. The EzGM.selection.conditional_spectrum method is greatly inspired by Prof. Jack W. Baker whom I thank for sharing his work with the research community.
