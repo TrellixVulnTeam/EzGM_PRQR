@@ -37,16 +37,18 @@ For EzGM examples, see:
 - EzGM downloads google-chrome or firefox webdriver while executing ngaw2_download method. Therefore, user-specified browser ('chrome' or 'firefox') must be readily available.
 - EzGM requires several other packages: <br /> openquake.engine>=3.14.0; numba==0.55.1; selenium==4.1.3; beautifulsoup4==4.11.1; tqdm==4.64.0; h5py==3.1.0; matplotlib==3.1.2
 - The package management system *pip* can be used to install EzGM (python >=3.7, <3.9).
-- In order to avoid any potential issues, the following is recommended for installation. 
+- In order to avoid any potential issues, the following is recommended for installation:
    1. First, upgrade pip.
    ```
    pip install --upgrade pip --user
    ```
-   2. Then, retrieve the universal installer from https://github.com/gem/oq-engine and install the required packages for you operating system. For example, for windows use the following:
+   2. Then, retrieve the universal installer from https://github.com/gem/oq-engine and install the required packages for you operating system via one of the followings.
    ```
+   pip install -r requirements_py38macos.txt
    pip install -r requirements_py38win64.txt
+   pip install -r requirements_py38linux64.txt
    ```
-   3. Then, use the universal installer to install openquake.engine:
+   3. Then, use the universal installer to install openquake.engine.
    ```
    pip setup.py install
    ```
