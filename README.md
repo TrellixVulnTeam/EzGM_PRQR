@@ -40,10 +40,11 @@ For EzGM examples, see:
 ```
 pip install EzGM
 ```
-- In case of anaconda in windows the following is suggested for installation:
+- In case of windows and anaconda, the following is suggested for installation:
 ```
-pip install -r requirements_py38win.txt
-conda install shapely
+pip install --upgrade pip
+pip install -r requirements_py38win64.txt
+pip install EzGM
 ```
 ***
 ## Acknowledgements
