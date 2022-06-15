@@ -42,7 +42,7 @@ For EzGM examples, see:
    ```
    pip install --upgrade pip --user
    ```
-   2. Then, retrieve the universal installer from https://github.com/gem/oq-engine. Then, install the required packages for your system. For example, use the following for python version 3.9 in windows:
+   2. Then, retrieve the universal installer from https://github.com/gem/oq-engine. Then, install the required packages for your system. For example, use the following for python 3.9 in windows:
    ```
    pip install -r requirements-py39-win64.txt
    ```
