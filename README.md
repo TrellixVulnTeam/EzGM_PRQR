@@ -50,7 +50,7 @@ For EzGM examples, see:
    ```
    3. Then, use the universal installer to install openquake.engine.
    ```
-   pip setup.py install
+   python setup.py install
    ```
    4. Finally, install EzGM via pip.
    ```
