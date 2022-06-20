@@ -42,15 +42,11 @@ For EzGM examples, see:
    ```
    pip install --upgrade pip --user
    ```
-   2. Then, retrieve the universal installer from https://github.com/gem/oq-engine. Then, install the required packages for your system. For example, use the following for python 3.9 in windows:
+   2. Then, retrieve the universal installer from https://github.com/gem/oq-engine. Then, install the openquake.engine package:
    ```
-   pip install -r requirements-py39-win64.txt
+   pip install -e .
    ```
-   3. Then, use the universal installer to install openquake.engine.
-   ```
-   python setup.py install
-   ```
-   4. Finally, install EzGM via pip.
+   3. Finally, install EzGM via pip.
    ```
    pip install EzGM
    ```
