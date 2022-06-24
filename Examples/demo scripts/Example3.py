@@ -71,7 +71,7 @@ check_gmpe_attributes(gmpe='BooreEtAl2014')
 ims = []
 for file in os.listdir(post_dir):
     if file.startswith('imls'):
-        ims.append(file.split('_')[1].split('.')[0])
+        ims.append(file.split('_')[1].split('.out')[0])
 
 for im in ims:  # for each im in the im list
     # read hazard and disaggregation info
