@@ -51,7 +51,7 @@ For EzGM examples, see:
    pip install -e .
    ```
    3. Clone EzGM, and open the terminal inside the clone directory. 
-   Activate the environment you want to install the package. Finally, install the package via the same command in step 2-)
+   Activate the environment you want to install the package. Finally, install the package via the same command in the previous step.
 ***
 ## Acknowledgements
 Special thanks to Besim Yukselen for his help in the development of ngaw2_download method, and Gerard J. O'Reilly for sharing his knowledge in the field with me. The EzGM.selection.conditional_spectrum method is greatly inspired by Prof. Jack W. Baker whom I thank for sharing his work with the research community.
