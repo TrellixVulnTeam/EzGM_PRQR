@@ -1774,11 +1774,11 @@ class conditional_spectrum(_subclass_):
             else:
                 scaleFac = np.ones(nBig)
 
-            mask = scaleFac > self.maxScale
-            idxs = np.where(~mask)[0]
-            err[mask] = 1000000
-            err[~mask] = np.sum((np.log(
-                np.exp(sampleBig[idxs, :]) * scaleFac[~mask].reshape(len(scaleFac[~mask]), 1)) -
+            mask = (1/self.maxScale < scaleFac) * (scaleFac < self.maxScale)
+            idxs = np.where(mask)[0]
+            err[~mask] = 1000000
+            err[mask] = np.sum((np.log(
+                np.exp(sampleBig[idxs, :]) * scaleFac[mask].reshape(len(scaleFac[mask]), 1)) -
                                  self.sim_spec[i, :]) ** 2, axis=1)
 
             recID[i] = int(np.argsort(err)[0])
@@ -1823,7 +1823,7 @@ class conditional_spectrum(_subclass_):
                 devTotal = weights[0] * np.sum(devMean * devMean) + weights[1] * np.sum(devSig * devSig)
 
                 # Check if we exceed the scaling limit
-                if scaleFac[j] > maxScale or np.any(recIDs == j):
+                if scaleFac[j] > maxScale or scaleFac[j] < 1/maxScale or np.any(recIDs == j):
                     devTotal = devTotal + 1000000
                 # Penalize bad spectra
                 elif penalty > 0:
