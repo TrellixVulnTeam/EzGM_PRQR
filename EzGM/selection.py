@@ -1,5 +1,5 @@
 """
-Ground motion record selection functions
+Ground motion record selection toolbox
 """
 
 # Import python libraries

@@ -3,7 +3,7 @@
 ####################################################
 
 from EzGM import signal
-from EzGM.utility import ReadNGA, run_time
+from EzGM.utility import ReadESM, run_time
 from time import time
 import numpy as np
 import matplotlib.pyplot as plt
@@ -27,9 +27,9 @@ Ag2_corrected = signal.baseline_correction(Ag2, dt, polynomial_type='Linear')
 Ag3_corrected = signal.baseline_correction(Ag3, dt, polynomial_type='Linear')
 
 # Apply band-pass filtering
-Ag1_filtered = signal.butterworth_filter(Ag1_corrected, dt, cut_off=(0.1, 25), filter_order=4, remove_gibs='mid')
-Ag2_filtered = signal.butterworth_filter(Ag2_corrected, dt, cut_off=(0.1, 25), filter_order=4, remove_gibs='mid')
-Ag3_filtered = signal.butterworth_filter(Ag3_corrected, dt, cut_off=(0.1, 25), filter_order=4, remove_gibs='mid')
+Ag1_filtered = signal.butterworth_filter(Ag1_corrected, dt, cut_off=(0.1, 25), filter_order=4, filter_type='bandpass')
+Ag2_filtered = signal.butterworth_filter(Ag2_corrected, dt, cut_off=(0.1, 25), filter_order=4, filter_type='bandpass')
+Ag3_filtered = signal.butterworth_filter(Ag3_corrected, dt, cut_off=(0.1, 25), filter_order=4, filter_type='bandpass')
 
 # Linear elastic analysis of a single degree of freedom system
 u1, v1, ac1, ac_tot1 = signal.sdof_ltha(Ag1_filtered, dt, T = 1.0, xi = 0.05)

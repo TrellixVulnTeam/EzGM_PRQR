@@ -5,6 +5,8 @@ This code is released under the MIT license.
 It is retrieved from: https://github.com/leonidessaguisagjr/webdriverdownloader
 Modified by Volkan Ozsarac on 21/04/2022
 """
+
+# Import python libraries
 import abc
 import logging
 import os

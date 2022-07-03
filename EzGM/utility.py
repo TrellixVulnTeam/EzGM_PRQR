@@ -1,16 +1,27 @@
 """
-Utility functions used to:
-    post-process OpenQuake PSHA results
-    read record files
-    create design spectra from building codes
-    to retrieve ESM database token to download records
-    to check available gmpes in OpenQuake and their attributes
+Utility functions
 """
 
+# Import python libraries
+import zipfile
+import difflib
+import os
+import sys
+from time import time
+import pandas as pd
+import numpy as np
+from scipy import interpolate
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import axes3d
+from matplotlib import cm
+from matplotlib.patches import Patch
+import requests
+import json
+from openquake.hazardlib import gsim
 
-#############################################################################################
-################### Methods to post-process OpenQuake PSHA results ##########################
-#############################################################################################
+
+# FUNCTIONS TO POST-PROCESS OPENQUAKE PSHA RESULTS
+# ---------------------------------------------------------------------
 
 def hazard_curve(poes, path_hazard_results, output_dir='Post_Outputs', filename='hazard_curve-mean'):
     """
@@ -34,12 +45,6 @@ def hazard_curve(poes, path_hazard_results, output_dir='Post_Outputs', filename=
     -------
     None.
     """
-
-    import pandas as pd
-    import numpy as np
-    from scipy import interpolate
-    import os
-    import matplotlib.pyplot as plt
 
     def get_iml(poes, apoe_data, iml_data, inv_t):
         """
@@ -204,13 +209,6 @@ def disagg_MR(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_rows
     None.
     """
 
-    import pandas as pd
-    import numpy as np
-    import os
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import axes3d
-    from matplotlib import cm  # import colormap
-
     # lets add the plotting options to make everything clearer
     cmap = cm.get_cmap('jet')  # Get desired colormap
 
@@ -337,14 +335,6 @@ def disagg_MReps(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_r
     None.
     """
 
-    import pandas as pd
-    import numpy as np
-    import os
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import axes3d
-    from matplotlib import cm  # import colormap
-    from matplotlib.patches import Patch
-
     # lets add the plotting options to make everything clearer
     cmap = cm.get_cmap('jet')  # Get desired colormap
 
@@ -460,9 +450,8 @@ def disagg_MReps(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_r
                 plt.close(fig)
 
 
-#############################################################################################
-##################### Methods to read ground motion record files ############################
-#############################################################################################
+# FUNCTIONS TO READ GROUND MOTION RECORD FILES
+# ---------------------------------------------------------------------
 
 def ContentFromZip(paths, zipName):
     """
@@ -483,7 +472,6 @@ def ContentFromZip(paths, zipName):
     contents   : dictionary
         Containing raw contents of the files which are read from the zipfile.
     """
-    import zipfile
 
     contents = {}
     with zipfile.ZipFile(zipName, 'r') as myzip:
@@ -530,8 +518,6 @@ def ReadNGA(inFilename=None, content=None, outFilename=None):
         acceleration array, same length with time unit
         usually in (g) unless stated as other.
     """
-
-    import numpy as np
 
     try:
         # Read the file content from inFilename
@@ -634,9 +620,6 @@ def ReadESM(inFilename=None, content=None, outFilename=None):
         usually in (g) unless stated as other.
     """
 
-    import difflib
-    import numpy as np
-
     try:
         # Read the file content from inFilename
         if content is None:
@@ -661,9 +644,8 @@ def ReadESM(inFilename=None, content=None, outFilename=None):
         print(f"Record file reader FAILED for {inFilename}: ", error)
 
 
-#############################################################################################
-################### Methods to create building code design spectra ##########################
-#############################################################################################
+# FUNCTIONS TO CREATE BUILDING CODE DESIGN SPECTRA
+# ---------------------------------------------------------------------
 
 def Sae_ec8_part1(ag, xi, T, ImpClass, Type, SiteClass):
     """
@@ -700,8 +682,6 @@ def Sae_ec8_part1(ag, xi, T, ImpClass, Type, SiteClass):
         Elastic acceleration response spectrum
 
     """
-
-    import numpy as np
 
     SpecProp = {
         'Type1': {
@@ -791,8 +771,6 @@ def Sae_asce7_16(T, SDS, SD1, TL):
         Elastic acceleration response spectrum
     """
 
-    import numpy as np
-
     T0 = 0.2 * (SD1 / SDS)
     TS = SD1 / SDS
     Sae = np.zeros(len(T))
@@ -845,9 +823,6 @@ def SiteParam_asce7_16(Lat, Long, RiskCat, SiteClass):
     TL: float
         Period value for long-period transition
     """
-
-    import requests
-    import json
 
     thisURL = 'https://earthquake.usgs.gov/ws/designmaps/asce7-16.json?latitude=' + str(Lat) + '&longitude=' + str(
         Long) + '&riskCategory=' + RiskCat + '&siteClass=' + SiteClass + '&title=Example'
@@ -912,11 +887,6 @@ def SiteParam_tbec2018(Lat, Long, DD, SiteClass):
     TL: float
         Period value for long-period transition
     """
-
-    from scipy import interpolate
-    import pandas as pd
-    import numpy as np
-    import os
 
     csv_file = 'Parameters_TBEC2018.csv'
     file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Meta_Data', csv_file)
@@ -1067,8 +1037,6 @@ def Sae_tbec2018(T, PGA, SDS, SD1, TL):
         Elastic acceleration response spectrum
     """
 
-    import numpy as np
-
     TA = 0.2 * SD1 / SDS
     TB = SD1 / SDS
     Sae = np.zeros(len(T))
@@ -1088,9 +1056,8 @@ def Sae_tbec2018(T, PGA, SDS, SD1, TL):
     return Sae
 
 
-#############################################################################################
-################### Methods to check GMPEs implemented in OpenQuake #########################
-#############################################################################################
+# FUNCTIONS TO CHECK GMPES IMPLEMENTED IN OPENQUAKE
+# ---------------------------------------------------------------------
 
 def get_available_gmpes():
     """
@@ -1107,8 +1074,6 @@ def get_available_gmpes():
     gmpes : dict
         Dictionary which contains available gmpes in openquake.
     """
-
-    from openquake.hazardlib import gsim
 
     gmpes = {}
     for name, gmpe in gsim.get_available_gsims().items():
@@ -1157,9 +1122,8 @@ def check_gmpe_attributes(gmpe):
     print(f"Required site parameters: {', '.join([site for site in oq_gmpe.REQUIRES_SITES_PARAMETERS])}")
 
 
-#############################################################################################
-###################               Other utility methods             #########################
-#############################################################################################
+# MISCELLANEOUS FUNCTIONS
+# ---------------------------------------------------------------------
 
 def get_esm_token(username, pwd):
     """
@@ -1184,9 +1148,6 @@ def get_esm_token(username, pwd):
     -------
     None.
     """
-
-    import os
-    import sys
 
     if sys.platform.startswith('win'):
         command = 'curl --ssl-no-revoke -X POST -F ' + '\"' + \
@@ -1250,8 +1211,6 @@ def run_time(start_time):
     -------
     None.
     """
-
-    from time import time
 
     finish_time = time()
     # Procedure to obtained elapsed time in Hr, Min, and Sec

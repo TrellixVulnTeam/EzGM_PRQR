@@ -1,12 +1,20 @@
 """
-Functions used for signal processing
+Signal processing toolbox
 """
+
+# Import python libraries
+import numpy as np
+import numpy.matlib
+from scipy.signal import butter, lfilter, windows
+from scipy.integrate import cumtrapz
+from scipy.fft import fft, fftfreq, fftshift
+
 
 def baseline_correction(values, dt, polynomial_type):
     """
     Details
     -------
-    This script will return baseline corrected values for the given signal.
+    This function performs base line correction on the given signal.
     
     Notes
     -----
@@ -31,8 +39,6 @@ def baseline_correction(values, dt, polynomial_type):
         corrected values
     """
 
-    import numpy as np
-
     if polynomial_type == 'Constant':
         n = 0
     elif polynomial_type == 'Linear':
@@ -50,11 +56,14 @@ def baseline_correction(values, dt, polynomial_type):
     return values_corrected
 
 
-def butterworth_filter(values, dt, cut_off=(0.1, 25), **kwargs):
+def butterworth_filter(values, dt, cut_off=25, filter_order=4, filter_type='lowpass', alpha_window=0.05):
     """
     Details
     -------
-    This script will return filtered values for the given signal.
+    This function performs infinite impulse response (IIR) filtering.
+    It uses butterworth digital and analog filter design.
+    Before performing the filtering, it applies tukey window on the signal, and adds zero pads with signal length
+    to the start and end.
     
     References
     ----------
@@ -66,87 +75,36 @@ def butterworth_filter(values, dt, cut_off=(0.1, 25), **kwargs):
         Input signal.
     dt: float
         time-step.
-    cut_off: tuple, list, optional          
-        Lower and upper cut off frequencies for the filter, if None then no filter. 
-        e.g. (None, 15) applies a lowpass filter at 15Hz, whereas (0.1, 10) applies
-        a bandpass filter at 0.1Hz to 10Hz.
-    kwargs: keyword arguments, optional
-        filter_order: int
-            Order of the Butterworth filter (default = 4).
-        remove_gibbs: str, the default is None.
-            Pads with zeros to remove the Gibbs filter effect.
-            if = 'start' then pads at start,
-            if = 'end' then pads at end,
-            if = 'mid' then pads half at start and half at end.
-        gibbs_extra: int, the default is 1
-            Each increment of the value doubles the record length using zero padding.
-        gibbs_range: int, the default is 50
-            gibbs index range.
+    cut_off: float, tuple, list, optional (The default is 25)
+        Cut off frequencies for the filter (Hz).
+        For lowpass and highpass filters this parameters is a float e.g. 25 or 0.1
+        For bandpass or bandstop filters this parameter is a tuple or list e.g. (0.1, 25)
+    filter_type: str, optional (The default is 'lowpass')
+        The type of filter {'lowpass', 'highpass', 'bandpass', 'bandstop'}.
+    filter_order: int, optional (The default is 4)
+        Order of the Butterworth filter.
+    alpha_window: float, optional (The default is 0.05)
+        Shape parameter of the Tukey window
+
     Returns
     -------
     values_filtered: numpy.array
         Filtered signal.
     """
 
-    import numpy as np
-    from scipy.signal import butter, filtfilt
-
     if isinstance(cut_off, list) or isinstance(cut_off, tuple):
-        pass
-    else:
-        raise ValueError("cut_off must be list or tuple.")
-    if len(cut_off) != 2:
-        raise ValueError("cut_off must be length 2.")
-    if cut_off[0] is not None and cut_off[1] is not None:
-        filter_type = "band"
         cut_off = np.array(cut_off)
-    elif cut_off[0] is None:
-        filter_type = 'low'
-        cut_off = cut_off[1]
-    else:
-        filter_type = 'high'
-        cut_off = cut_off[0]
-
-    filter_order = kwargs.get('filter_order', 4)
-    remove_gibbs = kwargs.get('remove_gibbs', None)
-    gibbs_extra = kwargs.get('gibbs_extra', 1)
-    gibbs_range = kwargs.get('gibbs_range', 50)
-    sampling_rate = 1.0 / dt
-    nyq = sampling_rate * 0.5
-
-    values_filtered = values
-    org_len = len(values_filtered)
-
-    if remove_gibbs is not None:
-        # Pad end of record with extra zeros then cut it off after filtering
-        nindex = int(np.ceil(np.log2(len(values_filtered)))) + gibbs_extra
-        new_len = 2 ** nindex
-        diff_len = new_len - org_len
-        if remove_gibbs == 'start':
-            s_len = 0
-            f_len = s_len + org_len
-        elif remove_gibbs == 'end':
-            s_len = diff_len
-            f_len = s_len + org_len
-        else:
-            s_len = int(diff_len / 2)
-            f_len = s_len + org_len
-
-        end_value = np.mean(values_filtered[-gibbs_range:])
-        start_value = np.mean(values_filtered[:gibbs_range])
-        temp = start_value * np.ones(new_len)
-        temp[f_len:] = end_value
-        temp[s_len:f_len] = values_filtered
-        values_filtered = temp
-    else:
-        s_len = 0
-        f_len = org_len
-
-    wp = cut_off / nyq
-    b, a = butter(filter_order, wp, btype=filter_type)
-    values_filtered = filtfilt(b, a, values_filtered)
-    # removing extra zeros from gibbs effect
-    values_filtered = values_filtered[s_len:f_len]
+    L = len(values)  # Signal length
+    sampling_rate = 1.0 / dt  # Sampling rate
+    nyq_freq = sampling_rate * 0.5  # Nyquist frequency
+    w = windows.tukey(L, alpha_window)  # This is the window
+    values_filtered = w * values  # Apply the tapered cosine window
+    values_filtered = np.append(np.append(np.zeros(L), values_filtered), np.zeros(L))  # Add zero pads to start and end
+    wn = cut_off / nyq_freq  # The critical frequency or frequencies. For lowpass and highpass filters,
+    # Wn is a scalar; for bandpass and bandstop filters, Wn is a length-2 sequence.
+    b, a = butter(filter_order, wn, filter_type)  # Numerator (b) and denominator (a) polynomials of the IIR filter.
+    values_filtered = lfilter(b, a, values_filtered)  # Filter data along one-dimension with an IIR or FIR filter.
+    values_filtered = values_filtered[L:2 * L]  # removing extra zeros
 
     return values_filtered
 
@@ -155,7 +113,7 @@ def sdof_ltha(Ag, dt, T, xi, m=1):
     """
     Details
     -------
-    This script will carry out linear time history analysis for SDOF system
+    This function carries out linear time history analysis for SDOF system
     It currently uses Newmark Beta Method.
     
     References
@@ -197,9 +155,6 @@ def sdof_ltha(Ag, dt, T, xi, m=1):
     ac_tot: numpy.array 
         Total acceleration response history.
     """
-
-    import numpy as np
-    import numpy.matlib
 
     if isinstance(T, (int, float)):
         T = np.array([T])
@@ -272,7 +227,7 @@ def get_parameters(Ag, dt, T, xi):
     """
     Details
     -------
-    This script will return various ground motion parameters for a given record.
+    This function computes various ground motion parameters or intensity measures for a given record.
         
     References
     ---------- 
@@ -371,11 +326,6 @@ def get_parameters(Ag, dt, T, xi):
             Velocity spectrum intensity.
             Requires T to be defined between (0.1-2.5 sec), otherwise not applicable, and equal to -1.
     """
-
-    import numpy as np
-    import numpy.matlib
-    from scipy.integrate import cumtrapz
-    from scipy.fft import fft, fftfreq, fftshift
 
     if isinstance(T, (int, float)):
         T = np.array([T])
@@ -537,7 +487,7 @@ def RotDxx_spectrum(Ag1, Ag2, dt, T, xi, xx):
     """
     Details
     -------
-    This script will return RotDxx spectrum. It currently uses Newmark Beta Method.
+    This function computes RotDxx spectrum. It currently uses Newmark Beta Method.
     
     References
     ---------- 
@@ -575,9 +525,6 @@ def RotDxx_spectrum(Ag1, Ag2, dt, T, xi, xx):
     Sa_RotDxx: numpy.array 
         RotDxx Spectra.
     """
-
-    import numpy as np
-    import numpy.matlib
 
     if isinstance(T, (int, float)):
         T = np.array([T])
