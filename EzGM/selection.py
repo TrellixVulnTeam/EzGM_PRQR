@@ -202,12 +202,13 @@ class _subclass_:
         """
         Details
         -------
-        Writes the cs_master object, selected and scaled records.
+        Writes the object as pickle, selected and scaled records as .txt files.
 
         Parameters
         ----------
         obj : int, optional
-            flag to write the object into the pickle file. The default is 0.
+            flag to write the object into the pickle file.
+            The default is 0.
         recs : int, optional
             flag to write the selected and scaled time histories.
             The default is 1.
@@ -687,7 +688,7 @@ class _subclass_:
         None
         """
 
-        def dir_size(Download_Dir):
+        def dir_size(download_dir):
             """
             Details
             -------
@@ -695,7 +696,7 @@ class _subclass_:
 
             Parameters
             ----------
-            Download_Dir     : str
+            download_dir     : str
                 Directory for the output time histories to be downloaded
 
             Returns
@@ -706,13 +707,13 @@ class _subclass_:
             """
 
             total_size = 0
-            for path, dirs, files in os.walk(Download_Dir):
+            for path, dirs, files in os.walk(download_dir):
                 for f in files:
                     fp = os.path.join(path, f)
                     total_size += os.path.getsize(fp)
             return total_size
 
-        def download_wait(Download_Dir):
+        def download_wait(download_dir):
             """
             Details
             -------
@@ -720,7 +721,7 @@ class _subclass_:
 
             Parameters
             ----------
-            Download_Dir     : str
+            download_dir     : str
                 Directory for the output time histories to be downloaded.
 
             Returns
@@ -731,16 +732,16 @@ class _subclass_:
             flag = 0
             flag_lim = 5
             while delta_size > 0 and flag < flag_lim:
-                size_0 = dir_size(Download_Dir)
+                size_0 = dir_size(download_dir)
                 sleep(1.5 * sleeptime)
-                size_1 = dir_size(Download_Dir)
+                size_1 = dir_size(download_dir)
                 if size_1 - size_0 > 0:
                     delta_size = size_1 - size_0
                 else:
                     flag += 1
                     print('Finishing in', flag_lim - flag, '...')
 
-        def set_driver(Download_Dir, browser):
+        def set_driver(download_dir, browser):
             """
             Details
             -------
@@ -748,7 +749,7 @@ class _subclass_:
 
             Parameters
             ----------
-            Download_Dir     : str
+            download_dir     : str
                 Directory for the output time histories to be downloaded.
             browser       : str, default is 'chrome'
                 The browser to use for download purposes. Valid entries are: 'chrome' or 'firefox'
@@ -778,7 +779,7 @@ class _subclass_:
                     options.add_argument('-headless')
                     options.add_argument('-no-sandbox')
                     options.add_argument('-disable-dev-shm-usage')
-                    prefs = {"download.default_directory": Download_Dir}
+                    prefs = {"download.default_directory": download_dir}
                     options.add_experimental_option("prefs", prefs)
                     driver = webdriver.Chrome('chromedriver', options=options)
 
@@ -789,7 +790,7 @@ class _subclass_:
                     options = webdriver.firefox.options.Options()
                     options.headless = True
                     options.set_preference("browser.download.folderList", 2)
-                    options.set_preference("browser.download.dir", Download_Dir)
+                    options.set_preference("browser.download.dir", download_dir)
                     options.set_preference('browser.download.useDownloadDir', True)
                     options.set_preference('browser.helperApps.neverAsk.saveToDisk', 'application/zip')
                     driver = webdriver.Firefox(executable_path=driver_path[1], options=options)
@@ -799,7 +800,7 @@ class _subclass_:
                     gdd = ChromeDriverDownloader()
                     driver_path = gdd.download_and_install()
                     ChromeOptions = webdriver.ChromeOptions()
-                    prefs = {"download.default_directory": Download_Dir}
+                    prefs = {"download.default_directory": download_dir}
                     ChromeOptions.add_experimental_option("prefs", prefs)
                     ChromeOptions.headless = True
                     driver = webdriver.Chrome(executable_path=driver_path[1], options=ChromeOptions)
@@ -835,6 +836,9 @@ class _subclass_:
                 Driver object used to download NGA_W2 records.
 
             """
+            # TODO: Selenium 4.3.0
+            #  Deprecated find_element_by_* and find_elements_by_* are now removed (#10712)
+            #  See: https://stackoverflow.com/questions/72773206/selenium-python-attributeerror-webdriver-object-has-no-attribute-find-el
             print("Signing in with credentials...")
             driver.get('https://ngawest2.berkeley.edu/users/sign_in')
             driver.find_element_by_id('user_email').send_keys(USERNAME)
@@ -856,7 +860,7 @@ class _subclass_:
 
             return driver
 
-        def download(RSNs, Download_Dir, driver):
+        def download(RSNs, download_dir, driver):
             """
 
             Details
@@ -869,7 +873,7 @@ class _subclass_:
             RSNs     : str
                 A string variable contains RSNs to be downloaded which uses ',' as delimiter
                 between RNSs, e.g.: '1,5,91,35,468'.
-            Download_Dir     : str
+            download_dir     : str
                 Directory for the output time histories to be downloaded.
             driver     : selenium webdriver object
                 Driver object used to download NGA_W2 records.
@@ -919,7 +923,7 @@ class _subclass_:
                 sleep(sleeptime)
                 obj.accept()
                 sleep(sleeptime)
-                download_wait(Download_Dir)
+                download_wait(download_dir)
                 driver.quit()
 
         if self.database['Name'] == 'NGA_W2':
@@ -1245,16 +1249,17 @@ class conditional_spectrum(_subclass_):
         """
         Details
         -------
-        This function calculates the logarithmic mean and standard deviation of intensity measure predicted by the selected GMPM at conditioning periods. 
+        This function calculates the logarithmic mean and standard deviation of intensity measure
+        predicted by the selected GMPM at conditioning periods.
         Moreover, it calculates the correlation coefficients between any period and conditioning period Tstar.
     
         Parameters
         ----------
-        sctx : openquake object
+        sctx : openquake.hazardlib.gsim object
             An instance of SitesContext with sites information to calculate PoEs on.
-        rctx : openquake object
+        rctx : openquake.hazardlib.gsim object
             An instance of RuptureContext with a single rupture information.
-        dctx : openquake object
+        dctx : openquake.hazardlib.gsim object
             An instance of DistancesContext with information about the distances between sites and a rupture.
     
         Returns
@@ -1313,6 +1318,261 @@ class conditional_spectrum(_subclass_):
 
         return mu_lnSaTstar, sigma_lnSaTstar, rho_T_Tstar
 
+    def _set_contexts(self, index):
+
+        """
+        Details
+        -------
+        Sets the parameters for the computation of a ground motion model. If
+        not defined by the user as input parameters, most parameters (dip,
+        hypocentral depth, fault width, ztor, azimuth, source-to-site distances
+        based on extended sources, z2pt5, z1pt0) are defined according to the
+        relationships included in Kaklamanos et al. 2011.
+
+        References
+        ----------
+        Kaklamanos J, Baise LG, Boore DM. (2011) Estimating unknown input parameters
+        when implementing the NGA ground-motion prediction equations in engineering
+        practice. Earthquake Spectra 27: 1219-1235.
+        https://doi.org/10.1193/1.3650372.
+
+        Parameters
+        ----------
+        index: int
+            The scenario index for which gmm attributes are set
+
+        Returns
+        -------
+        sctx : openquake.hazardlib.contexts.SitesContext
+            An instance of SitesContext with sites information to calculate PoEs on.
+        rctx : openquake.hazardlib.contexts.RuptureContext
+            An instance of RuptureContext with a single rupture information.
+        dctx : openquake.hazardlib.contexts.DistancesContext
+            An instance of DistancesContext with information about the distances between sites and a rupture.
+        """
+
+        # Initialize, the contexts for the scenario
+        sctx = gsim.base.SitesContext()
+        rctx = gsim.base.RuptureContext()
+        dctx = gsim.base.DistancesContext()
+
+        # RUPTURE PARAMETERS
+        # -------------------------------------
+        mag = self.rup_param['mag'][index]  # Earthquake magnitude
+        rake = self.rup_param['rake'][index]  # Fault rake
+
+        # Hypocentral depth
+        if 'hypo_depth' in self.rup_param.keys():
+            hypo_depth = self.rup_param['hypo_depth'][index]
+        else:
+            if (-45 <= rake <= 45) or (rake >= 135) or (rake <= -135):
+                hypo_depth = 5.63 + 0.68 * mag
+            else:
+                hypo_depth = 11.24 - 0.2 * mag
+
+        # Fault dip
+        if 'dip' in self.rup_param.keys():
+            dip = self.rup_param['hypo_depth'][index]
+        else:
+            if (-45 <= rake <= 45) or (rake >= 135) or (rake <= -135):
+                dip = 90
+            elif rake > 0:
+                dip = 40
+            else:
+                dip = 50
+
+        # Upper and lower seismogenic depths
+        if 'upper_sd' in self.rup_param.keys():
+            upper_sd = self.rup_param['upper_sd'][index]
+        else:
+            upper_sd = 0
+        if 'lower_sd' in self.rup_param.keys():
+            lower_sd = self.rup_param['lower_sd'][index]
+        else:
+            lower_sd = 500
+
+        # Rupture width and depth to top of coseismic rupture (km)
+        if (-45 <= rake <= 45) or (rake >= 135) or (rake <= -135):
+            # strike slip
+            width = 10.0 ** (-0.76 + 0.27 * mag)
+        elif rake > 0:
+            # thrust/reverse
+            width = 10.0 ** (-1.61 + 0.41 * mag)
+        else:
+            # normal
+            width = 10.0 ** (-1.14 + 0.35 * mag)
+        source_vertical_width = width * np.sin(np.radians(dip))
+        ztor = max(hypo_depth - 0.6 * source_vertical_width, upper_sd)
+        if (ztor + source_vertical_width) > lower_sd:
+            source_vertical_width = lower_sd - ztor
+            width = source_vertical_width / np.sin(np.radians(dip))
+        if 'width' in self.rup_param.keys():
+            width = self.rup_param['width'][index]
+        if 'ztor' in self.rup_param.keys():
+            ztor = self.rup_param['ztor'][index]
+
+        # Hanging-wall factor
+        if 'fhw' in self.rup_param.keys():
+            fhw = self.rup_param['fhw'][index]
+        else:
+            fhw = 0
+
+        # Source-to-site azimuth, alternative of hanging wall factor
+        if 'azimuth' in self.rup_param.keys():
+            azimuth = self.rup_param['azimuth'][index]
+        else:
+            if fhw == 1:
+                azimuth = 50
+            elif fhw == 0:
+                azimuth = -50
+
+        # Fault rake
+        setattr(rctx, 'rake', np.array([rake], dtype='float64'))
+        # Fault dip
+        setattr(rctx, 'dip', np.array([dip], dtype='float64'))
+        # Earthquake magnitude
+        setattr(rctx, 'mag', np.array([mag], dtype='float64'))
+        # Rupture width
+        setattr(rctx, 'width', np.array([width], dtype='float64'))
+        # Hypocentral depth of the rupture
+        setattr(rctx, 'hypo_depth', np.array([hypo_depth], dtype='float64'))
+        # Depth to top of coseismic rupture (km)
+        setattr(rctx, 'ztor', np.array([ztor], dtype='float64'))
+        # Annual rate of occurrence, not really required, setting this to zero
+        setattr(rctx, 'occurrence_rate', np.array([0.0], dtype='float64'))
+        # Do another loop in case some other rupture parameters which I do not recall are used.
+        pass_keys = ['azimuth', 'fhw', 'lower_sd', 'upper_sd']
+        for key in self.rup_param.keys():
+            if not key in pass_keys:
+                temp = np.array([self.rup_param[key][index]], dtype='float64')
+                setattr(rctx, key, temp)
+
+        # DISTANCE PARAMETERS
+        # -------------------------------------
+        # rjb and rx
+        if 'rjb' in self.dist_param.keys():
+            rjb = self.dist_param['rjb'][index]
+            if rjb == 0:
+                rx = 0.5 * width * np.cos(np.radians(dip))
+            else:
+                if dip == 90:
+                    rx = rjb * np.sin(np.radians(azimuth))
+                else:
+                    if (0 <= azimuth < 90) or (90 < azimuth <= 180):
+                        if rjb * np.abs(np.tan(np.radians(azimuth))) <= width * np.cos(np.radians(dip)):
+                            rx = rjb * np.abs(np.tan(np.radians(azimuth)))
+                        else:
+                            rx = rjb * np.tan(np.radians(azimuth)) * np.cos(np.radians(azimuth) -
+                                                                            np.arcsin(width * np.cos(
+                                                                                np.radians(dip)) * np.cos(
+                                                                                np.radians(azimuth)) / rjb))
+                    elif azimuth == 90:  # we assume that Rjb>0
+                        rx = rjb + width * np.cos(np.radians(dip))
+                    else:
+                        rx = rjb * np.sin(np.radians(azimuth))
+        elif 'rx' in self.dist_param.keys():
+            rx = self.dist_param['rx'][index]
+            rjb = None
+        else:
+            rx = None
+
+        # ry0
+        if azimuth == 90 or azimuth == -90:
+            ry0 = 0
+        elif azimuth == 0 or azimuth == 180 or azimuth == -180 and rjb:
+            ry0 = rjb
+        elif rx:
+            ry0 = np.abs(rx * 1. / np.tan(np.radians(azimuth)))
+        else:
+            ry0 = None
+
+        # rrup
+        if rjb and dip == 90:
+            rrup = np.sqrt(np.square(rjb) + np.square(ztor))
+        elif rx:
+            if rx < ztor * np.tan(np.radians(dip)):
+                rrup1 = np.sqrt(np.square(rx) + np.square(ztor))
+            if ztor * np.tan(np.radians(dip)) <= rx <= ztor * np.tan(np.radians(dip)) + width * 1. / np.cos(
+                    np.radians(dip)):
+                rrup1 = rx * np.sin(np.radians(dip)) + ztor * np.cos(np.radians(dip))
+            if rx > ztor * np.tan(np.radians(dip)) + width * 1. / np.cos(np.radians(dip)):
+                rrup1 = np.sqrt(
+                    np.square(rx - width * np.cos(np.radians(dip))) + np.square(ztor + width * np.sin(np.radians(dip))))
+            rrup = np.sqrt(np.square(rrup1) + np.square(ry0))
+        elif not 'rrup' in self.dist_param.keys():
+            if 'rhypo' in self.dist_param.keys():
+                rrup = self.dist_param['rhypo'][index]
+            elif 'repi' in self.dist_param.keys():
+                rrup = self.dist_param['repi'][index]
+            else:
+                raise ValueError('No distance parameter is defined!')
+
+        # Closest distance to coseismic rupture (km)
+        setattr(dctx, 'rrup', np.array([rrup], dtype='float64'))
+        if rx:  # Horizontal distance from top of rupture measured perpendicular to fault strike (km)
+            setattr(dctx, 'rx', np.array([rx], dtype='float64'))
+        if ry0:  # The horizontal distance off the end of the rupture measured parallel to strike (km)
+            setattr(dctx, 'ry0', np.array([ry0], dtype='float64'))
+        if rjb:  # Closest distance to surface projection of coseismic rupture (km)
+            setattr(dctx, 'rjb', np.array([rjb], dtype='float64'))
+        # Do another loop in case some other distance parameters which I do not recall are used
+        for key in self.dist_param.keys():
+            temp = np.array([self.dist_param[key][index]], dtype='float64')
+            setattr(dctx, key, temp)
+
+        # ADDITIONAL SITE PARAMETERS
+        # -------------------------------------
+        vs30 = self.site_param['vs30']
+
+        if 'vs30measured' in self.site_param.keys():
+            vs30measured = self.site_param['vs30measured']
+        else:
+            vs30measured = True
+
+        if 'z1pt0' in self.site_param.keys():
+            z1pt0 = self.site_param['z1pt0']
+        else:
+            z1pt0 = None
+
+        if 'z2pt5' in self.site_param.keys():
+            z2pt5 = self.site_param['z2pt5']
+        else:
+            z2pt5 = None
+
+        if z1pt0 is None:
+            if 'ChiouYoungs' in self.gmpe:
+                z1pt0 = np.exp(28.5 - 3.82 / 8 * np.log(vs30 ** 8 + 378.7 ** 8))
+            else:
+                if vs30 < 180:
+                    z1pt0 = np.exp(6.745)
+                elif 180 <= vs30 <= 500:
+                    z1pt0 = np.exp(6.745 - 1.35 * np.log(vs30 / 180))
+                else:
+                    z1pt0 = np.exp(5.394 - 4.48 * np.log(vs30 / 500))
+
+        if z2pt5 is None:
+            z2pt5 = 519 + 3.595 * z1pt0
+
+        # Site id
+        setattr(sctx, 'sids', np.array([0], dtype='float64'))
+        # Average shear-wave velocity of the site
+        setattr(sctx, 'vs30', np.array([vs30], dtype='float64'))
+        # vs30 type, True (measured) or False (inferred)
+        setattr(sctx, 'vs30measured', np.array([vs30measured]))
+        # Depth to Vs=1 km/sec
+        setattr(sctx, 'z1pt0', np.array([z1pt0], dtype='float64'))
+        # Depth to Vs=2.5 km/sec
+        setattr(sctx, 'z2pt5', np.array([z2pt5], dtype='float64'))
+        # Do another loop in case some other site parameters which I do not recall are used
+        for key in self.site_param.keys():
+            if isinstance(self.site_param[key], bool):
+                temp = np.array([self.site_param[key]])
+            else:
+                temp = np.array([self.site_param[key]], dtype='float64')
+            setattr(sctx, key, temp)
+
+        return sctx, rctx, dctx
+
     def create(self, Tstar=0.5, gmpe='BooreEtAl2014', selection=1, Sa_def='RotD50',
                site_param={'vs30': 520}, rup_param={'rake': [0.0, 45.0], 'mag': [7.2, 6.5]},
                dist_param={'rjb': [20, 5]}, Hcont=[0.6, 0.4], T_Tgt_range=[0.01, 4],
@@ -1324,8 +1584,12 @@ class conditional_spectrum(_subclass_):
     
         Notes
         -----
-        Requires libraries from openquake.
-        
+        See https://docs.openquake.org/oq-engine/master/openquake.hazardlib.gsim.html
+        in order to check required input parameters for the ground motion models.
+        e.g. rupture parameters (rup_param), site parameters (site_param), distance parameters (dist_param)
+        rupture parameters 'fhw', 'azimuth', 'upper_sd' and 'lower_sd' are used to derive some gmm parameters
+        in accordance with Kaklamanos et al. 2011 within conditional_spectrum._set_contexts method.
+
         References
         ----------
         Baker JW. Conditional Mean Spectrum: Tool for Ground-Motion Selection.
@@ -1356,12 +1620,38 @@ class conditional_spectrum(_subclass_):
         Sa_def : str, optional, the default is 'RotD50'.
             The spectra definition. Necessary if selection = 2.
             'GeoMean', 'RotD50', 'RotD100'.
-        site_param : dictionary
-            Contains required site parameters to define target spectrum.
-        rup_param  : dictionary
-            Contains required rupture parameters to define target spectrum.
-        dist_param : dictionary
-            Contains required distance parameters to define target spectrum.
+        site_param : dictionary, The default is {'vs30': 520}
+            Contains site parameters to define target spectrum.
+            Dictionary keys (parameters) are not list type. Same parameters are used for each scenario.
+            Some parameters are:
+            'vs30': Average shear-wave velocity of the site (required by all gmm)
+            'vs30measured': vs30 type, True (measured) or False (inferred)
+            'z1pt0': Depth to Vs=1 km/sec from the site
+            'z2pt5': Depth to Vs=2.5 km/sec from the site
+        rup_param  : dictionary, The default is {'rake': [0.0, 45.0], 'mag': [7.2, 6.5]}
+            Contains rupture parameters to define target spectrum.
+            Dictionary keys (parameters) are list type. Each item in the list corresponds to a scenario.
+            Some parameters are:
+            'mag': Magnitude of the earthquake (required by all gmm)
+            'rake': Fault rake (required by all gmm)
+            'dip': Fault dip
+            'width': Fault width
+            'hypo_depth': Hypocentral depth of the rupture
+            'ztor': Depth to top of coseismic rupture (km)
+            'fhw': Hanging-wall factor, 1 for site on down-dip side of top of rupture; 0 otherwise (optional)
+            'azimuth': Source-to-site azimuth, alternative of hanging wall factor (optional)
+            'upper_sd': Upper seismogenic depth (optional)
+            'lower_sd': Lower seismogenic depth (optional)
+        dist_param : dictionary, The default is {'rjb': [20, 5]}
+            Contains distance parameters to define target spectrum.
+            Dictionary keys (parameters) are list type. Each item in the list corresponds to a scenario.
+            Some parameters are:
+            'rjb': Closest distance to surface projection of coseismic rupture (km)
+            'rrup': Closest distance to coseismic rupture (km)
+            'repi': Epicentral distance (km)
+            'rhypo': Hypocentral distance (km)
+            'rx': Horizontal distance from top of rupture measured perpendicular to fault strike (km)
+            'ry0': The horizontal distance off the end of the rupture measured parallel to strike (km)
         Hcont      : list, optional, the default is None.
             Hazard contribution for considered scenarios. 
             If None hazard contribution is the same for all scenarios.
@@ -1384,7 +1674,7 @@ class conditional_spectrum(_subclass_):
         -------
         None.                    
         """
-        # TODO: gsim.get_mean_and_stddevs is deprecated, you should use ContextMaker.get_mean_stds,
+        # TODO: gsim.get_mean_and_stddevs is deprecated, use ContextMaker.get_mean_stds in the future.
         # see https://docs.openquake.org/oq-engine/advanced/developing.html#working-with-gmpes-directly-the-contextmaker
 
         if cond == 1:
@@ -1416,6 +1706,12 @@ class conditional_spectrum(_subclass_):
                 Sa = np.append(self.database['Sa_RotD50'], Sa_int, axis=1)
                 self.database['Sa_RotD50'] = Sa[:, np.argsort(Periods)]
 
+                f = interpolate.interp1d(self.database['Periods'], self.database['Sa_RotD100'], axis=1)
+                Sa_int = f(self.Tstar[0])
+                Sa_int.shape = (len(Sa_int), 1)
+                Sa = np.append(self.database['Sa_RotD100'], Sa_int, axis=1)
+                self.database['Sa_RotD100'] = Sa[:, np.argsort(Periods)]
+
                 self.database['Periods'] = Periods[np.argsort(Periods)]
 
         try:  # this is smth like self.bgmpe = gsim.boore_2014.BooreEtAl2014()
@@ -1425,18 +1721,6 @@ class conditional_spectrum(_subclass_):
         except KeyError:
             print(f'{gmpe} is not a valid gmpe name')
             raise
-
-        # These modifications are required for OpenQuake version > 3.13, as indicated by Michele in OQ forum
-        # Even if GMM does not require rrup per se, the engine still requires it for filtering the far away ruptures.
-        # You should assume that rrup is computed in all calculations even if not used in the functional form of the GMM.
-        if not 'rrup' in dist_param.keys():
-            if 'rjb' in dist_param.keys():
-                dist_param['rrup'] = dist_param['rjb']
-            elif 'rhypo' in dist_param.keys():
-                dist_param['rrup'] = dist_param['rhypo']
-            elif 'repi' in dist_param.keys():
-                dist_param['rrup'] = dist_param['repi']
-        site_param['sids'] = np.array([0])
 
         # add target spectrum settings to self
         self.selection = selection
@@ -1483,26 +1767,10 @@ class conditional_spectrum(_subclass_):
             Cov = np.zeros((len(self.T), len(self.T)))
 
             # Set the contexts for the scenario
-            sctx = gsim.base.SitesContext()
-            for key in site_param.keys():  # Site parameters are constant for each scenario
-                if isinstance(site_param[key], bool):
-                    temp = np.array([site_param[key]])
-                else:
-                    temp = np.array([site_param[key]], dtype='float64')
-                setattr(sctx, key, temp)
-
-            rctx = gsim.base.RuptureContext()
-            for key in rup_param.keys():
-                temp = np.array([rup_param[key][n]], dtype='float64')
-                setattr(rctx, key, temp)
-
-            dctx = gsim.base.DistancesContext()
-            for key in dist_param.keys():
-                temp = np.array([dist_param[key][n]], dtype='float64')
-                setattr(dctx, key, temp)
+            sctx, rctx, dctx = self._set_contexts(n)
 
             for i in range(len(self.T)):
-                # Get the GMPE ouput for a rupture scenario
+                # Get the GMPE output for a rupture scenario
                 mu, sigma = self.bgmpe.get_mean_and_stddevs(sctx, rctx, dctx, imt.SA(period=self.T[i]),
                                                             [const.StdDev.TOTAL])
                 mu_lnSaT[i] = mu
@@ -1546,7 +1814,7 @@ class conditional_spectrum(_subclass_):
                                             rho_T_Tstar[j] * np.sqrt(varTstar * var2)])
                         sigma12.shape = (2, 1)
                         sigma22.shape = (1, 1)
-                        sigma_cond = sigma11 - sigma12 * 1. / (sigma22) * sigma12.T
+                        sigma_cond = sigma11 - sigma12 * 1. / sigma22 * sigma12.T
                         Cov[i, j] = sigma_cond[0, 1]
 
                     elif self.cond == 0:
@@ -1570,15 +1838,15 @@ class conditional_spectrum(_subclass_):
 
         cov_diag = np.sum(Cov_elms, 1)
         TgtCov_fin[np.eye(len(self.T)) == 1] = cov_diag
+        TgtSigma_fin = np.sqrt(np.diagonal(TgtCov_fin))
 
-        # Find covariance values of zero and set them to a small number so that
-        # TgtCov_fin[np.abs(TgtCov_fin) < 1e-10] = 1e-10
+        # Avoid positive semi-definite covariance matrix with several eigenvalues being exactly zero.
+        # For the time being, it looks like the warning may be ignored; but NumPy documentation says that the
+        # behavior in non-psd case is undefined, so I would not want to rely on this.
+        # See: https://stackoverflow.com/questions/41515522/numpy-positive-semi-definite-warning
         min_eig = np.min(np.real(np.linalg.eigvals(TgtCov_fin)))
         if min_eig < 0:
-            TgtCov_fin -= 10 * min_eig * np.eye(*TgtCov_fin.shape)
-
-        TgtSigma_fin = np.sqrt(np.diagonal(TgtCov_fin))
-        TgtSigma_fin[np.isnan(TgtSigma_fin)] = 0
+            TgtCov_fin -= min_eig * np.eye(*TgtCov_fin.shape)
 
         # Add target spectrum to self
         self.mu_ln = TgtMean_fin
@@ -1774,12 +2042,12 @@ class conditional_spectrum(_subclass_):
             else:
                 scaleFac = np.ones(nBig)
 
-            mask = (1/self.maxScale < scaleFac) * (scaleFac < self.maxScale)
+            mask = (1 / self.maxScale < scaleFac) * (scaleFac < self.maxScale)
             idxs = np.where(mask)[0]
             err[~mask] = 1000000
             err[mask] = np.sum((np.log(
                 np.exp(sampleBig[idxs, :]) * scaleFac[mask].reshape(len(scaleFac[mask]), 1)) -
-                                 self.sim_spec[i, :]) ** 2, axis=1)
+                                self.sim_spec[i, :]) ** 2, axis=1)
 
             recID[i] = int(np.argsort(err)[0])
             if err.min() >= 1000000:
@@ -1823,7 +2091,7 @@ class conditional_spectrum(_subclass_):
                 devTotal = weights[0] * np.sum(devMean * devMean) + weights[1] * np.sum(devSig * devSig)
 
                 # Check if we exceed the scaling limit
-                if scaleFac[j] > maxScale or scaleFac[j] < 1/maxScale or np.any(recIDs == j):
+                if scaleFac[j] > maxScale or scaleFac[j] < 1 / maxScale or np.any(recIDs == j):
                     devTotal = devTotal + 1000000
                 # Penalize bad spectra
                 elif penalty > 0:
