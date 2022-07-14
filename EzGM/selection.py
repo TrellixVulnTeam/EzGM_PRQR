@@ -34,9 +34,57 @@ class _subclass_:
      conditional_spectrum and code_spectrum.
     """
 
-    def _search_database(self):
+    def __init__(self):
+        """
+        Details
+        -------
+        Checks if Meta_Data folder exist inside EzGM. If it does not exist it is going to be retrieved
+        using the shared link to the zip file in google drive.
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        None.
+
         """
 
+        directory_to_extract_to = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Meta_Data')
+        if os.path.isdir(directory_to_extract_to):  # if meta data is retrieved before no need to do anything
+            pass
+        else:  # if meta data is not retrieved before, download it from the shared link
+            # File id from google drive: last part of the shared link
+            file_id = '15cfA8rVB6uLG7T85HOrar7u0AaCOUdxt'
+            path_to_zip_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Meta_Data.zip')
+            URL = "https://docs.google.com/uc?export&confirm=download"
+            CHUNK_SIZE = 32768
+
+            session = requests.Session()
+            response = session.get(URL, params={'id': file_id}, stream=True)
+            token = None
+            for key, value in response.cookies.items():
+                if key.startswith('download_warning'):
+                    token = value
+                    break
+
+            if token:
+                params = {'id': id, 'confirm': token}
+                response = session.get(URL, params=params, stream=True)
+
+            with open(path_to_zip_file, "wb") as f:
+                for chunk in response.iter_content(CHUNK_SIZE):
+                    if chunk:  # filter out keep-alive new chunks
+                        f.write(chunk)
+
+            with zipfile.ZipFile(path_to_zip_file, 'r') as zip_ref:
+                zip_ref.extractall(directory_to_extract_to)
+            # Remove the zip file after extracting the files
+            os.remove(path_to_zip_file)
+
+    def _search_database(self):
+        """
         Details
         -------
         Searches the database and does the filtering.
@@ -994,6 +1042,7 @@ class conditional_spectrum(_subclass_):
         """
 
         # Add the input the ground motion database to use
+        super().__init__()
         matfile = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Meta_Data', database)
         self.database = loadmat(matfile, squeeze_me=True)
         self.database['Name'] = database
@@ -2246,6 +2295,7 @@ class code_spectrum(_subclass_):
         """
 
         # Add the input the ground motion database to use
+        super().__init__()
         matfile = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Meta_Data', database)
         self.database = loadmat(matfile, squeeze_me=True)
 
