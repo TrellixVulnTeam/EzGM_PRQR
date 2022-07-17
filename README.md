@@ -17,12 +17,13 @@ The package has three different modules:
    Currently, the records can be selected from the two publicly available databases: *NGA_W2* and *ESM_2018*. 
    The original flat-files for these databases were modified by discarding the records which are not possible to download. <br />
    The database files which include features to perform record selection are stored as .mat files in path/to/EzGM/Meta_Data.
-   If the user desires to use/add another database such as ESM_2018.mat, s/he must stick to the same format in publicly available databases. <br />
-   Upon performing ground motion record selection/scaling if user desires to get formatted records, for the given metadata, s/he should place the available records from metadata file into the Records.zip with the name of database, 
+   Upon installation, during the use of this module for the first time, the default Meta_Data folder will be downloaded from: https://drive.google.com/file/d/15cfA8rVB6uLG7T85HOrar7u0AaCOUdxt/view?usp=sharing.
+   If users desire to use/add another database such as ESM_2018.mat, they must stick to the same format in publicly available databases. <br />
+   Upon performing ground motion record selection/scaling if users desire to get formatted records, for the given metadata, they should place the available records from metadata file into the Records.zip with the name of database, 
    e.g. *ESM_2018.zip* for database *ESM_2018*. 
-   <br /> In case of publicly available databases, the user can also download the records directly by using the associated methods since the records are not generally available beforehand.
-   To use *ESM_2018* database, the user must have access token (path/to/current/directory/token.txt) from https://esm-db.eu. The token
-   can be retrieved using EzGM as well (see Example 1). In order to use *NGA_W2* database, user must have account obtained from https://ngawest2.berkeley.edu.
+   <br /> In case of publicly available databases, users can also download the records directly by using the associated methods since the records are not generally available beforehand.
+   To use *ESM_2018* database, users must have access token (path/to/current/directory/token.txt) from https://esm-db.eu. The token
+   can be retrieved using EzGM as well (see Example 1). In order to use *NGA_W2* database, users must have account obtained from https://ngawest2.berkeley.edu.
 2. **EzGM.utility** can be used to post-process results of probabilistic seismic hazard analysis (PSHA) from OpenQuake.Engine. Its methods can be used to read and visualize seismic hazard curves and seismic disaggregation results. The module can be particularly useful
 while performing conditional spectrum (CS) based record selection for multiple-stripe analysis (MSA) (see Example 3).
 3. **EzGM.signal** can be used to process ground motion records. It contains methods for filtering, baseline correction, and intensity measure calculations (see Example 4).
