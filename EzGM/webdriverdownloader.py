@@ -10,7 +10,6 @@ Modified by Volkan Ozsarac on 21/04/2022
 import abc
 import logging
 import os
-import os.path
 from pathlib import Path
 import platform
 import shutil

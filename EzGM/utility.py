@@ -7,6 +7,8 @@ import zipfile
 import difflib
 import os
 import sys
+from copy import deepcopy
+import re
 from time import time
 import pandas as pd
 import numpy as np
@@ -17,7 +19,8 @@ from matplotlib import cm
 from matplotlib.patches import Patch
 import requests
 import json
-from openquake.hazardlib import gsim
+from openquake.hazardlib import gsim, nrml
+from openquake.baselib.node import Node
 
 
 # FUNCTIONS TO POST-PROCESS OPENQUAKE PSHA RESULTS
@@ -448,6 +451,109 @@ def disagg_MReps(Mbin, dbin, path_disagg_results, output_dir='Post_Outputs', n_r
                 np.savetxt(fname, np.asarray(dists), fmt='%.1f')
                 plt.show()
                 plt.close(fig)
+
+
+# FUNCTIONS TO PARSE A LOGIC TREE FROM SA to AvgSA
+# ---------------------------------------------------------------------
+def parse_sa_lt_to_avgsa(input_lt_file, output_lt_file, periods, correlation):
+    """
+    Details
+    -------
+    Parses the ordinary SA ground motion logic tree to an AvgSA equivalent
+
+    Parameters
+    ----------
+    input_lt_file : str
+        Input GMPE logic tree for SA, e.g. 'gmmLT.xml'
+    output_lt_file : str
+        The output GMPE LT file, e.g. 'gmmLT_AvgSA.xml'
+    periods : list
+        List of periods for the AvgSA calculation
+        e.g. periods = [[0.4,0.5,0.6,0.7,0.8], [1.1,1.2,1.3,1.4,1.5]]
+    correlation: str
+        String for one of the supported correlation models (e.g. 'akkar', 'baker_jayaram')
+
+    Returns
+    -------
+    None.
+    """
+
+    def replace_text_str(input_str):
+        """
+        Details
+        -------
+        Replaces the text string of an uncertainty model with an alternative
+        formulation in terms of Average Sa
+
+        Parameters
+        ----------
+        input_str : str
+            Input string (return carriage delimited) describing entire uncertainty model
+
+        Returns
+        -------
+        None.
+        """
+
+        search_output = re.search(r'\[(.*?)\]', input_str)
+        if search_output:
+            input_gmpe = search_output.group(1)
+        else:
+            input_gmpe = input_str.strip()
+        period_str = ",".join(["{:s}".format(str(per)) for per in periods])
+        # Setup initial arguments for GenericGmpeAvgSa
+        initial_set = ["[GenericGmpeAvgSA]",
+                       "gmpe_name = \"{:s}\"".format(input_gmpe),
+                       "avg_periods = {:s}".format(period_str),
+                       "corr_func = \"{:s}\"".format(correlation)]
+        if not search_output:
+            # No additional arguments passed to GMPE, just return the string as is
+            return "\n".join(initial_set)
+
+        for isegment in input_str.split("\n"):
+            segment = isegment.strip()
+            if not segment:
+                # Empty string
+                continue
+            if input_gmpe in segment:
+                new_gmpe = segment.replace(input_gmpe,
+                                           "GenericGmpeAvgSA")
+                if not new_gmpe in initial_set:
+                    initial_set.append(new_gmpe)
+            else:
+                initial_set.append(segment)
+        return "\n".join(initial_set)
+
+    [input_lt] = nrml.read(input_lt_file)
+    output_lt = []
+    for blev in input_lt:
+
+        if blev.tag.endswith("logicTreeBranchingLevel"):
+            # Removes the branching level
+            bset = blev[0]
+        else:
+            # Has no branching level, only branch set
+            bset = deepcopy(blev)
+        bset_branches = []
+        for br in bset:
+            unc_model_str = br.uncertaintyModel.text
+            weight = float(br.uncertaintyWeight.text)
+            new_unc_model = replace_text_str(unc_model_str)
+            br_node = Node("logicTreeBranch", br.attrib, nodes=[
+                Node("uncertaintyModel", text=new_unc_model),
+                Node("uncertaintyWeight", text=str(weight))
+            ])
+            bset_branches.append(br_node)
+        output_bs = Node("logicTreeBranchSet",
+                         bset.attrib,
+                         nodes=bset_branches)
+        output_lt.append(output_bs)
+    output_lt = Node("logicTree",
+                     {"logicTreeID": input_lt["logicTreeID"] + "AvgSA"},
+                     nodes=output_lt)
+    with open(output_lt_file, "wb") as f:
+        nrml.write([output_lt], f, fmt="%s")
+    print("Written to %s" % output_lt_file)
 
 
 # FUNCTIONS TO READ GROUND MOTION RECORD FILES
