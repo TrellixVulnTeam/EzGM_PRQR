@@ -33,7 +33,7 @@ These can be accessed and run through *binder* which is an online service to dep
 For EzGM examples, see:
 
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/volkanozsarac/EzGM/HEAD?filepath=Examples%2Fbinder)
-***
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/volkanozsarac/EzGM/blob/master/Examples/google%20colab/Tutorial.ipynb)
 ## Installation
 - EzGM downloads google-chrome or firefox webdriver while executing ngaw2_download method. Therefore, user-specified browser ('chrome' or 'firefox') must be readily available.
 - EzGM requires: <br /> openquake.engine>=3.14.0; selenium>=4.2.0; numba>=0.55.1; beautifulsoup4>=4.11.1; tqdm>=4.64.0; 
