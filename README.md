@@ -29,7 +29,7 @@ while performing conditional spectrum (CS) based record selection for multiple-s
 3. **EzGM.signal** can be used to process ground motion records. It contains methods for filtering, baseline correction, and intensity measure calculations (see Example 4).
 
 At the moment, no documentation is available for EzGM; hence, users are recommended to see the jupyter notebook examples to get familiar with EzGM.
-These can be accessed and run through *binder* which is an online service to deploy interactive computational environments for online repositories.
+These can be accessed and run through *binder* which is an online service to deploy interactive computational environments for online repositories. Likewise, the notebooks which are ready to use through google colaboratory can be accessed.
 For EzGM examples, see:
 
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/volkanozsarac/EzGM/HEAD?filepath=Examples%2Fbinder)
