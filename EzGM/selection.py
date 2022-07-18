@@ -1028,13 +1028,9 @@ class conditional_spectrum(_subclass_):
         ----------
         database : str, optional
             Database to use: NGA_W2, ESM_2018
-        The default is NGA_W2.
-            outdir     : str, optional, the default is 'Outputs'.
+            The default is NGA_W2.
+        outdir     : str, optional, the default is 'Outputs'.
             output directory to create.
-        pInfo    : int, optional
-            Flag to print required input for the gmpe which is going to be used. 
-            (0: no, 1:yes)
-            The default is 1.
             
         Returns
         -------
