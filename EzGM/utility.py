@@ -1204,29 +1204,40 @@ def check_gmpe_attributes(gmpe):
     None.
     """
 
-    from openquake.hazardlib import gsim
-
     try:  # this is smth like self.bgmpe = gsim.boore_2014.BooreEtAl2014()
         oq_gmpe = gsim.get_available_gsims()[gmpe]()
+
+        print(f"GMPE name: {gmpe}")
+        print(f"Supported tectonic region: {oq_gmpe.DEFINED_FOR_TECTONIC_REGION_TYPE.name}")
+        print(f"Supported standard deviation: {', '.join([std for std in oq_gmpe.DEFINED_FOR_STANDARD_DEVIATION_TYPES])}")
+        print(f"Supported intensity measure: "
+              f"{', '.join([imt.__name__ for imt in oq_gmpe.DEFINED_FOR_INTENSITY_MEASURE_TYPES])}")
+        print(f"Supported intensity measure component: {oq_gmpe.DEFINED_FOR_INTENSITY_MEASURE_COMPONENT.name}")
+        try:
+            coeffs_labels = difflib.get_close_matches('COEFFS', dir(oq_gmpe))
+            sa_lowers = []
+            sa_uppers = []
+            for tmp in coeffs_labels:
+                sa_keys = eval('list(oq_gmpe.' + tmp + '.sa_coeffs.keys())')
+                if sa_keys:
+                    sa_lowers.append(sa_keys[0].period)
+                    sa_uppers.append(sa_keys[-1].period)
+            if sa_lowers:
+                sa_lower = max(sa_lowers)
+                sa_upper = min(sa_uppers)
+                print(f"Supported SA period range: {' - '.join([str(sa_lower), str(sa_upper)])}")
+            else:
+                print("The supported SA period range is unknown")
+        except AttributeError:
+            print("The supported SA period range is unknown")
+        print(f"Required distance parameters: {', '.join([dist for dist in oq_gmpe.REQUIRES_DISTANCES])}")
+        print(f"Required rupture parameters: {', '.join([rup for rup in oq_gmpe.REQUIRES_RUPTURE_PARAMETERS])}")
+        print(f"Required site parameters: {', '.join([site for site in oq_gmpe.REQUIRES_SITES_PARAMETERS])}")
+
     except KeyError:
-        print(f'{gmpe} is not a valid gmpe name')
-        raise
-
-    print(f"GMPE name: {gmpe}")
-    print(f"Supported tectonic region: {oq_gmpe.DEFINED_FOR_TECTONIC_REGION_TYPE.name}")
-    print(f"Supported standard deviation: {', '.join([std for std in oq_gmpe.DEFINED_FOR_STANDARD_DEVIATION_TYPES])}")
-    print(f"Supported intensity measure: "
-          f"{', '.join([imt.__name__ for imt in oq_gmpe.DEFINED_FOR_INTENSITY_MEASURE_TYPES])}")
-    print(f"Supported intensity measure component: {oq_gmpe.DEFINED_FOR_INTENSITY_MEASURE_COMPONENT.name}")
-    try:
-        sa_keys = list(oq_gmpe.COEFFS.sa_coeffs.keys())
-        print(f"Supported SA period range: {' - '.join([str(sa_keys[0].period), str(sa_keys[-1].period)])}")
-    except IndexError:
-        pass
-    print(f"Required distance parameters: {', '.join([dist for dist in oq_gmpe.REQUIRES_DISTANCES])}")
-    print(f"Required rupture parameters: {', '.join([rup for rup in oq_gmpe.REQUIRES_RUPTURE_PARAMETERS])}")
-    print(f"Required site parameters: {', '.join([site for site in oq_gmpe.REQUIRES_SITES_PARAMETERS])}")
-
+        raise KeyError(f'{gmpe} is not a valid gmpe name')
+    except BaseException as e:
+        raise e
 
 # MISCELLANEOUS FUNCTIONS
 # ---------------------------------------------------------------------
