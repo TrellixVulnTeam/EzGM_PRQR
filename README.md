@@ -13,7 +13,7 @@ The package has three different modules:
    It can be used to perform unconditional or conditional spectrum based selection in which intensity measure can be chosen as Sa(T*) or AvgSa(T*). The tool makes use of 
    [OpenQuake hazard library](https://docs.openquake.org/oq-engine/3.14/openquake.hazardlib.gsim.html#ground-shaking-intensity-models) and 
    thus any available ground motion prediction equation available can directly be used (see Example 1). <br />
-   It can also be used to perform the selection based on Turkish Building Earthquake Code, TBEC-2018, ASCE 7-16, and Eurocode 8 Part 1 (see Example 2). <br />
+   It can also be used to perform the selection based on Turkish Building Earthquake Code (TBEC-2018), ASCE 7-16, and Eurocode 8 Part 1 (see Example 2). <br />
    Currently, the records can be selected from the two publicly available databases: *NGA_W2* and *ESM_2018*. 
    The original flat-files for these databases were modified by discarding the records which are not possible to download. <br />
    The database files which include features to perform record selection are stored as .mat files in path/to/EzGM/Meta_Data.

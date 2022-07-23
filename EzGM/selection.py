@@ -39,7 +39,7 @@ class _subclass_:
         Details
         -------
         Checks if Meta_Data folder exist inside EzGM. If it does not exist it is going to be retrieved
-        using the shared link to the zip file in google drive.
+        using the shared link to the zip file in Google Drive.
 
         Parameters
         ----------
@@ -1631,9 +1631,10 @@ class conditional_spectrum(_subclass_):
         -----
         See https://docs.openquake.org/oq-engine/master/openquake.hazardlib.gsim.html
         in order to check required input parameters for the ground motion models.
-        e.g. rupture parameters (rup_param), site parameters (site_param), distance parameters (dist_param)
-        rupture parameters 'fhw', 'azimuth', 'upper_sd' and 'lower_sd' are used to derive some gmm parameters
-        in accordance with Kaklamanos et al. 2011 within conditional_spectrum._set_contexts method.
+        e.g. rupture parameters (rup_param), site parameters (site_param), distance parameters (dist_param).
+        Rupture parameters 'fhw', 'azimuth', 'upper_sd' and 'lower_sd' are used to derive some gmm parameters
+        in accordance with Kaklamanos et al. 2011 within conditional_spectrum._set_contexts method. They are not
+        required by any gmm.
 
         References
         ----------
@@ -1669,7 +1670,7 @@ class conditional_spectrum(_subclass_):
             Contains site parameters to define target spectrum.
             Dictionary keys (parameters) are not list type. Same parameters are used for each scenario.
             Some parameters are:
-            'vs30': Average shear-wave velocity of the site (required by all gmm)
+            'vs30': Average shear-wave velocity of the site
             'vs30measured': vs30 type, True (measured) or False (inferred)
             'z1pt0': Depth to Vs=1 km/sec from the site
             'z2pt5': Depth to Vs=2.5 km/sec from the site
@@ -1678,7 +1679,7 @@ class conditional_spectrum(_subclass_):
             Dictionary keys (parameters) are list type. Each item in the list corresponds to a scenario.
             Some parameters are:
             'mag': Magnitude of the earthquake (required by all gmm)
-            'rake': Fault rake (required by all gmm)
+            'rake': Fault rake
             'dip': Fault dip
             'width': Fault width
             'hypo_depth': Hypocentral depth of the rupture
@@ -1889,6 +1890,7 @@ class conditional_spectrum(_subclass_):
         # For the time being, it looks like the warning may be ignored; but NumPy documentation says that the
         # behavior in non-psd case is undefined, so I would not want to rely on this.
         # See: https://stackoverflow.com/questions/41515522/numpy-positive-semi-definite-warning
+        # Covariance matrix is going to be used to perform the initial record selection
         min_eig = np.min(np.real(np.linalg.eigvals(TgtCov_fin)))
         if min_eig < 0:
             TgtCov_fin -= min_eig * np.eye(*TgtCov_fin.shape)
@@ -1941,24 +1943,23 @@ class conditional_spectrum(_subclass_):
                 # Note: we may use latin hypercube sampling here instead. I leave it as Monte Carlo for now
                 specDict[j][i, :] = np.exp(np.random.multivariate_normal(self.mu_ln, self.cov))
 
-            devMeanSim = np.mean(np.log(specDict[j]),
-                                 axis=0) - self.mu_ln  # how close is the mean of the spectra to the target
-            devSigSim = np.std(np.log(specDict[j]),
-                               axis=0) - self.sigma_ln  # how close is the mean of the spectra to the target
-            devSkewSim = skew(np.log(specDict[j]),
-                              axis=0)  # how close is the skewness of the spectra to zero (i.e., the target)
-
+            # how close is the mean of the spectra to the target
+            devMeanSim = np.mean(np.log(specDict[j]), axis=0) - self.mu_ln 
+            # how close is the mean of the spectra to the target
+            devSigSim = np.std(np.log(specDict[j]), axis=0) - self.sigma_ln
+            # how close is the skewness of the spectra to zero (i.e., the target)  
+            devSkewSim = skew(np.log(specDict[j]), axis=0)  
+            # combine the three error metrics to compute a total error
             devTotalSim[j] = self.weights[0] * np.sum(devMeanSim ** 2) + \
                              self.weights[1] * np.sum(devSigSim ** 2) + \
-                             0.1 * (self.weights[2]) * np.sum(
-                devSkewSim ** 2)  # combine the three error metrics to compute a total error
+                             0.1 * (self.weights[2]) * np.sum(devSkewSim ** 2)
 
         recUse = np.argmin(np.abs(devTotalSim))  # find the simulated spectra that best match the targets
         self.sim_spec = np.log(specDict[recUse])  # return the best set of simulations
 
     def select(self, nGM=30, isScaled=1, maxScale=4,
                Mw_lim=None, Vs30_lim=None, Rjb_lim=None, fault_lim=None,
-               nTrials=20, weights=[1, 2, 0.3], seedValue=0, nLoop=2, penalty=0, tol=10):
+               nTrials=20, seedValue=0, weights=[1, 2, 0.3], nLoop=2, penalty=0, tol=10):
         """
         Details
         -------
@@ -2001,6 +2002,13 @@ class conditional_spectrum(_subclass_):
                 'TF' for thrust faulting
                 'TS' for predominately thrust with strike-slip component
                 'U' for unknown
+        nTrials : int, optional, the default is 20.
+            nTrials sets of response spectra are simulated and the best set (in terms of
+            matching means, variances and skewness is chosen as the seed). The user
+            can also optionally rerun this segment multiple times before deciding to
+            proceed with the rest of the algorithm. It is to be noted, however, that
+            the greedy improvement technique significantly improves the match between
+            the means and the variances subsequently.
         seedValue  : int, optional, the default is 0.
             For repeatability. For a particular seedValue not equal to
             zero, the code will output the same set of ground motions.
@@ -2010,13 +2018,6 @@ class conditional_spectrum(_subclass_):
             generated each time.
         weights : numpy.array or list, optional, the default is [1,2,0.3].
             Weights for error in mean, standard deviation and skewness
-        nTrials : int, optional, the default is 20.
-            nTrials sets of response spectra are simulated and the best set (in terms of
-            matching means, variances and skewness is chosen as the seed). The user
-            can also optionally rerun this segment multiple times before deciding to
-            proceed with the rest of the algorithm. It is to be noted, however, that
-            the greedy improvement technique significantly improves the match between
-            the means and the variances subsequently.
         nLoop   : int, optional, the default is 2.
             Number of loops of optimization to perform.
         penalty : int, optional, the default is 0.
